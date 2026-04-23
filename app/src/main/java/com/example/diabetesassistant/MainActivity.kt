@@ -4,13 +4,16 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import com.example.diabetesassistant.ui.*
 import com.example.diabetesassistant.ui.theme.DiabetesAssistantTheme
 
 class MainActivity : ComponentActivity() {
@@ -19,29 +22,38 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             DiabetesAssistantTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
+                MainScreen()
             }
         }
     }
 }
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
+fun MainScreen() {
+    var selectedItem by remember { mutableIntStateOf(1) } // Default to 'Camera' result screen as requested
+    val items = listOf("首页", "拍照", "档案库", "我的")
+    val icons = listOf(Icons.Filled.Home, Icons.Filled.CameraAlt, Icons.Filled.Folder, Icons.Filled.Person)
 
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    DiabetesAssistantTheme {
-        Greeting("Android")
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                items.forEachIndexed { index, item ->
+                    NavigationBarItem(
+                        icon = { Icon(icons[index], contentDescription = item) },
+                        label = { Text(item) },
+                        selected = selectedItem == index,
+                        onClick = { selectedItem = index }
+                    )
+                }
+            }
+        }
+    ) { innerPadding ->
+        val modifier = Modifier.padding(innerPadding)
+        when (selectedItem) {
+            0 -> HomeScreen(modifier)
+            1 -> FoodRecognitionResultScreen()
+            2 -> ArchivesScreen(modifier)
+            3 -> ProfileScreen(modifier)
+        }
     }
 }
