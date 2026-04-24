@@ -41,8 +41,8 @@ androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycl
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 
 # Hilt 依赖注入
-hilt-android = { group = "com.google.dagger", name = "hilt-android", version = "2.52" }
-hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version = "2.52" }
+hilt-android = { group = "com.google.dagger", name = "hilt-android", version = "2.57.1" }
+hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version = "2.57.1" }
 hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version = "1.2.0" }
 
 # DataStore 偏好存储
@@ -68,4 +68,4 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
-hilt = { id = "com.google.dagger.hilt.android", version = "2.52" }
+hilt = { id = "com.google.dagger.hilt.android", version = "2.57.1" }

@@ -1,6 +1,8 @@
 package com.example.diabetesassistant.archive.model
 
 import androidx.room.TypeConverter
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -8,6 +10,7 @@ import java.time.format.DateTimeFormatter
 class Converters {
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
     private val dateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+    private val gson = Gson()
 
     @TypeConverter
     fun fromTimestamp(value: String?): LocalDateTime? {
@@ -29,16 +32,15 @@ class Converters {
         return date?.format(dateFormatter)
     }
 
-    // 伪代码：实际使用时推荐使用 kotlinx.serialization 或 Gson
     @TypeConverter
-    fun fromDishList(value: String): List<DishAnalysis> {
-        // 实现将 JSON 字符串转回 List 的逻辑
-        return emptyList()
+    fun fromDishList(value: String?): List<DishAnalysis> {
+        if (value == null) return emptyList()
+        val listType = object : TypeToken<List<DishAnalysis>>() {}.type
+        return gson.fromJson(value, listType)
     }
 
     @TypeConverter
-    fun dishListToString(list: List<DishAnalysis>): String {
-        // 实现将 List 转为 JSON 字符串的逻辑
-        return ""
+    fun dishListToString(list: List<DishAnalysis>?): String {
+        return gson.toJson(list ?: emptyList<DishAnalysis>())
     }
 }
