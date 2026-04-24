@@ -1,3 +1,57 @@
-<resources>
-    <string name="app_name">Diabetes Assistant</string>
+﻿<resources>
+    <string name="app_name">糖控助手</string>
+    <string name="module_home">首页</string>
+    <string name="module_camera">拍照</string>
+    <string name="module_archive">档案</string>
+    <string name="module_life">我的</string>
+
+    <string name="home_glucose_title">餐食分析概览</string>
+    <string name="home_glucose_unit">毫摩尔/升</string>
+    <string name="home_glucose_last">最近测量: %1$s</string>
+    <string name="home_glucose_status_normal">已生成建议</string>
+    <string name="home_advice_title">智能建议</string>
+    <string name="home_advice_body">拍照识别餐食后，系统会估算糖负荷并给出运动与药量核对建议。</string>
+    <string name="home_intake_title">餐食统计</string>
+    <string name="home_intake_calories">今日热量</string>
+    <string name="home_intake_calories_fmt">%1$d / %2$d 千卡</string>
+    <string name="home_intake_ratio">荤素比例</string>
+    <string name="home_intake_meat">荤食</string>
+    <string name="home_intake_veg">素食</string>
+    <string name="home_intake_ratio_fmt">荤食 %1$d%%, 素食 %2$d%%</string>
+    <string name="home_intake_sugar">可吸收糖分</string>
+    <string name="home_intake_sugar_fmt">%1$.0f / %2$.0f 克</string>
+    <string name="home_feedback_title">快捷反馈</string>
+    <string name="home_feedback_last">最近一次分析</string>
+    <string name="home_feedback_summary">%1$s · %2$s · %3$s</string>
+
+    <string name="camera_capture_hint">将餐食放入取景框中，点击下方按钮开始识别分析。</string>
+    <string name="camera_shutter">拍照分析</string>
+    <string name="camera_pick_gallery">从相册选择</string>
+    <string name="camera_pick_hint">模拟器或未授予相机权限时，也可以直接从相册选择图片。</string>
+    <string name="camera_pick_failed">无法读取所选图片，请重试。</string>
+    <string name="camera_permission_rationale">需要相机权限才能拍摄食物照片并进行识别。</string>
+    <string name="camera_grant_permission">授予权限</string>
+    <string name="camera_recognition_loading">智能算法正在分析餐食…</string>
+    <string name="camera_recognition_sub">请稍候，系统正在估算营养、糖负荷与建议方案。</string>
+    <string name="camera_result_title">餐食分析结果</string>
+    <string name="camera_ingredients">食材列表</string>
+    <string name="camera_add_ingredient">添加食材</string>
+    <string name="camera_ingredient_hint">输入食材名称</string>
+    <string name="camera_cooking_method">烹饪方式</string>
+    <string name="camera_sugar_insulin_card">糖负荷、运动与药量建议</string>
+    <string name="camera_estimated_sugar">预计可吸收糖分约 %1$.1f 克</string>
+    <string name="camera_insulin_hint">参考药量约 %1$.1f 单位，并建议餐后轻运动；具体剂量请结合医嘱调整。</string>
+    <string name="camera_action_save">保存</string>
+    <string name="camera_action_share">分享</string>
+    <string name="camera_action_delete">删除</string>
+    <string name="camera_saved_toast">已保存到餐食分析档案。</string>
+    <string name="camera_share_chooser">分享识别结果</string>
+
+    <string name="cook_steam">清蒸</string>
+    <string name="cook_braise">红烧</string>
+    <string name="cook_stir_fry">清炒</string>
+    <string name="cook_boil">水煮</string>
+    <string name="cook_cold">凉拌</string>
+    <string name="cook_roast">烤制</string>
+    <string name="cook_other">其他</string>
 </resources>
