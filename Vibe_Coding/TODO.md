@@ -42,38 +42,38 @@
 ## 阶段二：数据层 💾
 
 ### 2.1 Room DB 实体与 DAO
-- [ ] Entity: User（用户信息）
-- [ ] Entity: HealthProfile（糖尿病类型、胰岛素类型、用量范围、体重、身高）
-- [ ] Entity: FoodRecord（图片路径、日期、菜品名、AI JSON、状态）
-- [ ] Entity: CommunityPost（标题、内容、图片、血糖标签、点赞评论数）
-- [ ] Entity: Comment（内容、用户ID、帖子ID、时间）
-- [ ] Entity: Favorite（用户ID、帖子ID）
-- [ ] Entity: CookingMethodTable（烹饪方式、修正值）
-- [ ] Entity: UsdaCache（原料名、基础碳水值）
-- [ ] 创建对应 DAO 接口
-- [ ] 预填充烹饪修正表（蒸/煮+0, 凉拌+1, 煲汤+1, 炒+2, 烧烤+2, 爆炒+3, 干煸+3, 红烧+5, 油炸+6, 糖醋+8）
+- [x] Entity: User（用户信息）
+- [x] Entity: HealthProfile（糖尿病类型、胰岛素类型、用量范围、体重、身高）
+- [x] Entity: FoodRecord（图片路径、日期、菜品名、AI JSON、状态）
+- [x] Entity: CommunityPost（标题、内容、图片、血糖标签、点赞评论数）
+- [x] Entity: Comment（内容、用户ID、帖子ID、时间）
+- [x] Entity: Favorite（用户ID、帖子ID）
+- [x] Entity: CookingMethodTable（烹饪方式、修正值）
+- [x] Entity: UsdaCache（原料名、基础碳水值）
+- [x] 创建对应 DAO 接口
+- [x] 预填充烹饪修正表（蒸/煮+0, 凉拌+1, 煲汤+1, 炒+2, 烧烤+2, 爆炒+3, 干煸+3, 红烧+5, 油炸+6, 糖醋+8）
 
 ### 2.2 DataStore 偏好
-- [ ] 登录状态、深色模式偏好、Onboarding完成状态
+- [x] 登录状态、深色模式偏好、Onboarding完成状态
 
 ### 2.3 Model 类
-- [ ] AI 返回数据模型（DishRecognitionResult, Dish, Ingredient）
-- [ ] 血糖计算参数模型
-- [ ] 胰岛素色带参数模型
-- [ ] 胰岛素范围常量对象（速效/短效/中效/长效 min/max/起效/峰值/持续）
+- [x] AI 返回数据模型（DishRecognitionResult, Dish, Ingredient）
+- [x] 血糖计算参数模型
+- [x] 胰岛素色带参数模型
+- [x] 胰岛素范围常量对象（速效/短效/中效/长效 min/max/起效/峰值/持续）
 
 ### 2.4 远程 API 客户端
-- [ ] DashScope API（Qwen VL）Retrofit 接口
-- [ ] USDA API Retrofit 接口
-- [ ] API Key 安全存储
-- [ ] 网络错误处理与重试
+- [x] DashScope API（Qwen VL）Retrofit 接口
+- [x] USDA API Retrofit 接口
+- [x] API Key 安全存储
+- [x] 网络错误处理与重试
 
 ### 2.5 Repository 层
-- [ ] UserRepository（登录注册、用户信息）
-- [ ] FoodRecordRepository（档案 CRUD）
-- [ ] CommunityRepository（帖子/评论/收藏 CRUD）
-- [ ] AiRepository（Qwen VL 调用封装）
-- [ ] NutritionRepository（USDA 查询 + 缓存逻辑）
+- [x] UserRepository（登录注册、用户信息）
+- [x] FoodRecordRepository（档案 CRUD）
+- [x] CommunityRepository（帖子/评论/收藏 CRUD）
+- [x] AiRepository（Qwen VL 调用封装）
+- [x] NutritionRepository（USDA 查询 + 缓存逻辑）
 
 ### ✅ 阶段二审查节点
 

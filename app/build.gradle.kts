@@ -18,6 +18,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "DASHSCOPE_API_KEY", "\"\"")
+        buildConfigField("String", "USDA_API_KEY", "\"\"")
     }
 
     buildTypes {
@@ -42,6 +45,10 @@ kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 dependencies {
     implementation(libs.androidx.core.ktx)
