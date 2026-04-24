@@ -1,0 +1,4 @@
+package com.example.diabetesassistant.data.remote
+
+// 占位符：阶段二实现 Retrofit API 接口（Qwen VL DashScope + USDA）
+// 详见 TODO.md 阶段二 §2.4

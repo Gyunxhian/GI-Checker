@@ -1,0 +1,4 @@
+package com.example.diabetesassistant.domain.algorithm
+
+// 占位符：阶段三实现 Step 1~7 核心血糖算法
+// 详见 TODO.md 阶段三

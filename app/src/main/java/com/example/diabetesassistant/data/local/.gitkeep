@@ -1,0 +1,4 @@
+package com.example.diabetesassistant.data.local
+
+// 占位符：阶段二实现 Room Database、Entity、DAO
+// 详见 TODO.md 阶段二 §2.1
