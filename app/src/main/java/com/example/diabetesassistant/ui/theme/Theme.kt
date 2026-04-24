@@ -1,73 +1,95 @@
 package com.example.diabetesassistant.ui.theme
 
-import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF6BFFA0),
-    onPrimary = Color(0xFF00391A),
-    primaryContainer = Color(0xFF0B5F31),
-    onPrimaryContainer = Color(0xFFD9FFE5),
-    secondary = Color(0xFF83E8A5),
-    onSecondary = Color(0xFF06351A),
-    secondaryContainer = Color(0xFF124B2A),
-    onSecondaryContainer = Color(0xFFE7FFEF),
-    tertiary = Color(0xFF9EF5C1),
-    onTertiary = Color(0xFF06351A),
-    background = Color(0xFF07140D),
-    surface = Color(0xFF10221A),
-    surfaceVariant = Color(0xFF21372B),
-    onSurface = Color(0xFFEAF7EF),
-    onSurfaceVariant = Color(0xFFC4D6CB),
-)
+/**
+ * 外观模式枚举（三选一，存储于 DataStore）
+ * implementation_plan.md: "深色模式：三选一：跟随系统/浅色/深色"
+ */
+enum class AppThemeMode {
+    /** 跟随系统 */
+    FOLLOW_SYSTEM,
 
+    /** 强制浅色 */
+    LIGHT,
+
+    /** 强制深色 */
+    DARK,
+}
+
+// ─── 浅色方案（基于文档 6 色） ─────────────────────────────────────────
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF008A3D),
+    primary = HealthPalette.Dark,                   // #2E7E5D 主交互色
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFDDFBE7),
-    onPrimaryContainer = Color(0xFF063B1B),
-    secondary = Color(0xFF18A558),
+    primaryContainer = HealthPalette.LightBackground, // #A8D4B9
+    onPrimaryContainer = HealthPalette.Darkest,       // #1A5F3A
+    secondary = HealthPalette.Secondary,              // #4B9B6E
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE8FFF0),
-    onSecondaryContainer = Color(0xFF063B1B),
-    tertiary = Color(0xFF69D98A),
-    onTertiary = Color.White,
-    background = Color(0xFFF1FBF3),
-    surface = Color(0xF5FFFFFF),
-    surfaceVariant = Color(0xFFE5F4EA),
-    onSurface = Color(0xFF16251D),
-    onSurfaceVariant = Color(0xFF63746A),
+    secondaryContainer = HealthPalette.Accent.copy(alpha = 0.25f), // #C2E05E 25%
+    onSecondaryContainer = HealthPalette.Darkest,
+    tertiary = HealthPalette.Accent,                  // #C2E05E 强调
+    onTertiary = HealthPalette.Darkest,
+    background = Color(0xFFF4FAF6),                   // 极浅绿白底
+    onBackground = Color(0xFF15231B),
+    surface = Color(0xFFF8FCFA),
+    onSurface = Color(0xFF15231B),
+    surfaceVariant = HealthPalette.LightBackground.copy(alpha = 0.45f),
+    onSurfaceVariant = Color(0xFF3E5448),
+    outline = HealthPalette.Primary.copy(alpha = 0.35f),
+    error = HealthPalette.Danger,
+    onError = Color.White,
 )
 
+// ─── 深色方案（保持绿色调，背景深灰绿） ──────────────────────────────────
+private val DarkColorScheme = darkColorScheme(
+    primary = HealthPalette.Primary,                  // #6BBF8B
+    onPrimary = HealthPalette.Darkest,
+    primaryContainer = HealthPalette.Secondary,        // #4B9B6E
+    onPrimaryContainer = HealthPalette.Accent,         // #C2E05E
+    secondary = HealthPalette.LightBackground,         // #A8D4B9
+    onSecondary = HealthPalette.Darkest,
+    secondaryContainer = HealthPalette.Dark,            // #2E7E5D
+    onSecondaryContainer = HealthPalette.LightBackground,
+    tertiary = HealthPalette.Accent,
+    onTertiary = HealthPalette.Darkest,
+    background = Color(0xFF0B1610),                    // 极深绿黑底
+    onBackground = Color(0xFFD8F0E4),
+    surface = Color(0xFF111F18),
+    onSurface = Color(0xFFD8F0E4),
+    surfaceVariant = Color(0xFF1E2F26),
+    onSurfaceVariant = Color(0xFFA8CCBA),
+    outline = HealthPalette.Dark.copy(alpha = 0.55f),
+    error = HealthPalette.Danger,
+    onError = Color.White,
+)
+
+/**
+ * 全局主题入口。
+ *
+ * @param themeMode 外观模式（三选一，由 DataStore 偏好控制）
+ * @param content   子组合树
+ */
 @Composable
 fun DiabetesAssistantTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // 默认关闭动态取色，使用医疗风浅青绿主题；需要系统壁纸取色时可改为 true
-    dynamicColor: Boolean = false,
-    content: @Composable () -> Unit
+    themeMode: AppThemeMode = AppThemeMode.FOLLOW_SYSTEM,
+    content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    val useDark = when (themeMode) {
+        AppThemeMode.FOLLOW_SYSTEM -> isSystemInDarkTheme()
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.DARK -> true
     }
+
+    val colorScheme = if (useDark) DarkColorScheme else LightColorScheme
 
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
-        content = content
+        content = content,
     )
 }
