@@ -82,47 +82,47 @@
 ## 阶段三：核心算法 🧮
 
 ### 3.1 Step 1 — 原料综合碳水
-- [ ] 综合碳水 = USDA基础碳水 + 烹饪修正值
-- [ ] 原料总碳水 = 综合碳水 × 重量 / 100
-- [ ] 单元测试（番茄炒蛋示例）
+- [x] 综合碳水 = USDA基础碳水 + 烹饪修正值
+- [x] 原料总碳水 = 综合碳水 × 重量 / 100
+- [x] 单元测试（番茄炒蛋示例）
 
 ### 3.2 Step 2 — 荤素分类汇总
-- [ ] 按 category 分荤素，计算各组总碳水/总重量/每g碳水
-- [ ] 单元测试
+- [x] 按 category 分荤素，计算各组总碳水/总重量/每g碳水
+- [x] 单元测试
 
 ### 3.3 Step 3 — 总碳水摄入
-- [ ] C_total = [每g素碳水×(1-meat_ratio) + 每g荤碳水×meat_ratio] × intake_pct × 总重量
-- [ ] 滑块拖动实时重算
-- [ ] 单元测试
+- [x] C_total = [每g素碳水×(1-meat_ratio) + 每g荤碳水×meat_ratio] × intake_pct × 总重量
+- [x] 滑块拖动实时重算
+- [x] 单元测试
 
 ### 3.4 Step 4 — 加权平均 GI
-- [ ] GI_avg = Σ(碳水占比 × gi_value)
-- [ ] GI → Gamma 参数映射（a = 3.0-(GI/100)*1.5, b = 25-(GI/100)*5）
-- [ ] 单元测试（验证 GI_avg=35.3）
+- [x] GI_avg = Σ(碳水占比 × gi_value)
+- [x] GI → Gamma 参数映射（a = 3.0-(GI/100)*1.5, b = 25-(GI/100)*5）
+- [x] 单元测试（验证 GI_avg=35.3）
 
 ### 3.5 Step 5 — 血糖波动预测
-- [ ] Gamma 分布吸收曲线 Absorption(t)
-- [ ] BG(t) = BG_start + C_total × (GI_avg/100) × 0.05 × Absorption(t)
-- [ ] 生成 240 个数据点
-- [ ] 单元测试（验证峰值 ≈ 5.23）
+- [x] Gamma 分布吸收曲线 Absorption(t)
+- [x] BG(t) = BG_start + C_total × (GI_avg/100) × 0.05 × Absorption(t)
+- [x] 生成 240 个数据点
+- [x] 单元测试（验证峰值 ≈ 5.23）
 
 ### 3.6 Step 6 — 胰岛素色带
-- [ ] base = clamp(C_total/12, min, max)
-- [ ] 三段：蓝[min, base×0.7] 绿[base×0.7, base×1.3] 红[base×1.3, max]
-- [ ] 宽度比例计算
-- [ ] 单元测试（速效 C=50g 和 C=150g）
+- [x] base = clamp(C_total/12, min, max)
+- [x] 三段：蓝[min, base×0.7] 绿[base×0.7, base×1.3] 红[base×1.3, max]
+- [x] 宽度比例计算
+- [x] 单元测试（速效 C=50g 和 C=150g）
 
 ### 3.7 Step 7 — 重点关注时段
-- [ ] 遍历 BG(t)，找超阈值区间（≥10.0/≥7.8/≤3.9）
-- [ ] 提取峰值时间+血糖值，按严重程度排序
-- [ ] 调用 Qwen VL 生成温馨提醒（≤30字）
-- [ ] 单元测试
+- [x] 遍历 BG(t)，找超阈值区间（≥10.0/≥7.8/≤3.9）
+- [x] 提取峰值时间+血糖值，按严重程度排序
+- [x] 调用 Qwen VL 生成温馨提醒（≤30字）
+- [x] 单元测试
 
 ### 3.8 UseCase 封装
-- [ ] AnalyzeFoodUseCase（Step 0~7 完整流程）
-- [ ] CalculateBloodSugarUseCase（Step 3~5 联动）
-- [ ] CalculateInsulinBandUseCase（Step 6）
-- [ ] GenerateAlertUseCase（Step 7）
+- [x] AnalyzeFoodUseCase（Step 0~7 完整流程）
+- [x] CalculateBloodSugarUseCase（Step 3~5 联动）
+- [x] CalculateInsulinBandUseCase（Step 6）
+- [x] GenerateAlertUseCase（Step 7）
 
 ### ✅ 阶段三审查节点
 

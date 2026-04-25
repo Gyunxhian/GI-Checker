@@ -30,6 +30,14 @@ import com.example.diabetesassistant.data.repository.NutritionRepository
 import com.example.diabetesassistant.data.repository.NutritionRepositoryImpl
 import com.example.diabetesassistant.data.repository.UserRepository
 import com.example.diabetesassistant.data.repository.UserRepositoryImpl
+import com.example.diabetesassistant.domain.algorithm.BloodSugarPredictor
+import com.example.diabetesassistant.domain.algorithm.CarbAndGiCalculator
+import com.example.diabetesassistant.domain.algorithm.FocusPeriodAnalyzer
+import com.example.diabetesassistant.domain.algorithm.InsulinBandCalculator
+import com.example.diabetesassistant.domain.usecase.AnalyzeFoodUseCase
+import com.example.diabetesassistant.domain.usecase.CalculateBloodSugarUseCase
+import com.example.diabetesassistant.domain.usecase.CalculateInsulinBandUseCase
+import com.example.diabetesassistant.domain.usecase.GenerateAlertUseCase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -249,6 +257,96 @@ object AppModule {
         usdaCacheDao: UsdaCacheDao,
         apiKeyProvider: com.example.diabetesassistant.data.remote.ApiKeyProvider,
     ): NutritionRepository = NutritionRepositoryImpl(usdaApi, usdaCacheDao, apiKeyProvider)
+
+    /**
+     * 提供碳水与 GI 计算器。
+     */
+    @Provides
+    @Singleton
+    fun provideCarbAndGiCalculator(): CarbAndGiCalculator = CarbAndGiCalculator()
+
+    /**
+     * 提供血糖预测器。
+     */
+    @Provides
+    @Singleton
+    fun provideBloodSugarPredictor(carbAndGiCalculator: CarbAndGiCalculator): BloodSugarPredictor {
+        return BloodSugarPredictor(carbAndGiCalculator)
+    }
+
+    /**
+     * 提供胰岛素色带计算器。
+     */
+    @Provides
+    @Singleton
+    fun provideInsulinBandCalculator(): InsulinBandCalculator = InsulinBandCalculator()
+
+    /**
+     * 提供重点时段分析器。
+     */
+    @Provides
+    @Singleton
+    fun provideFocusPeriodAnalyzer(): FocusPeriodAnalyzer = FocusPeriodAnalyzer()
+
+    /**
+     * 提供完整餐食分析用例。
+     */
+    @Provides
+    @Singleton
+    fun provideAnalyzeFoodUseCase(
+        nutritionRepository: NutritionRepository,
+        aiRepository: AiRepository,
+        cookingMethodDao: CookingMethodDao,
+        carbAndGiCalculator: CarbAndGiCalculator,
+        bloodSugarPredictor: BloodSugarPredictor,
+        insulinBandCalculator: InsulinBandCalculator,
+        focusPeriodAnalyzer: FocusPeriodAnalyzer,
+    ): AnalyzeFoodUseCase {
+        return AnalyzeFoodUseCase(
+            nutritionRepository = nutritionRepository,
+            aiRepository = aiRepository,
+            cookingMethodDao = cookingMethodDao,
+            carbAndGiCalculator = carbAndGiCalculator,
+            bloodSugarPredictor = bloodSugarPredictor,
+            insulinBandCalculator = insulinBandCalculator,
+            focusPeriodAnalyzer = focusPeriodAnalyzer,
+        )
+    }
+
+    /**
+     * 提供血糖计算用例。
+     */
+    @Provides
+    @Singleton
+    fun provideCalculateBloodSugarUseCase(
+        carbAndGiCalculator: CarbAndGiCalculator,
+        bloodSugarPredictor: BloodSugarPredictor,
+    ): CalculateBloodSugarUseCase {
+        return CalculateBloodSugarUseCase(carbAndGiCalculator, bloodSugarPredictor)
+    }
+
+    /**
+     * 提供胰岛素色带计算用例。
+     */
+    @Provides
+    @Singleton
+    fun provideCalculateInsulinBandUseCase(
+        insulinBandCalculator: InsulinBandCalculator,
+    ): CalculateInsulinBandUseCase {
+        return CalculateInsulinBandUseCase(insulinBandCalculator)
+    }
+
+    /**
+     * 提供提醒生成用例。
+     */
+    @Provides
+    @Singleton
+    fun provideGenerateAlertUseCase(
+        focusPeriodAnalyzer: FocusPeriodAnalyzer,
+        aiRepository: AiRepository,
+    ): GenerateAlertUseCase {
+        return GenerateAlertUseCase(focusPeriodAnalyzer, aiRepository)
+    }
 }
 
 /**

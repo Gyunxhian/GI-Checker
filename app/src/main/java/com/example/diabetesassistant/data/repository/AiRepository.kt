@@ -20,6 +20,11 @@ interface AiRepository {
      * 调用 Qwen VL 识别菜品，返回 JSON 文本。
      */
     suspend fun recognizeDishJson(imageUrl: String, prompt: String): NetworkResult<String>
+
+    /**
+     * 调用 Qwen 生成文本提醒。
+     */
+    suspend fun generateReminderText(prompt: String): NetworkResult<String>
 }
 
 /**
@@ -77,6 +82,53 @@ class AiRepositoryImpl @Inject constructor(
             NetworkResult.Error(message = "DashScope network error.", throwable = exception)
         } catch (exception: Exception) {
             NetworkResult.Error(message = "DashScope unknown error.", throwable = exception)
+        }
+    }
+
+    /**
+     * @see AiRepository.generateReminderText
+     */
+    override suspend fun generateReminderText(prompt: String): NetworkResult<String> {
+        return try {
+            val request = DashScopeRequest(
+                input = DashScopeInput(
+                    messages = listOf(
+                        DashScopeMessage(
+                            role = "user",
+                            content = listOf(DashScopeContent(text = prompt)),
+                        ),
+                    ),
+                ),
+            )
+
+            val response = dashScopeApi.recognizeDish(
+                authorization = "Bearer ${apiKeyProvider.dashScopeApiKey()}",
+                request = request,
+            )
+
+            val text = response.output
+                ?.choices
+                ?.firstOrNull()
+                ?.message
+                ?.content
+                ?.firstOrNull()
+                ?.text
+
+            if (text.isNullOrBlank()) {
+                NetworkResult.Error(message = "DashScope returned empty reminder content.")
+            } else {
+                NetworkResult.Success(text)
+            }
+        } catch (exception: HttpException) {
+            NetworkResult.Error(
+                code = exception.code(),
+                message = "DashScope reminder request failed: HTTP ${exception.code()}",
+                throwable = exception,
+            )
+        } catch (exception: IOException) {
+            NetworkResult.Error(message = "DashScope reminder network error.", throwable = exception)
+        } catch (exception: Exception) {
+            NetworkResult.Error(message = "DashScope reminder unknown error.", throwable = exception)
         }
     }
 }
