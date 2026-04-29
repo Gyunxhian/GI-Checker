@@ -9,11 +9,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -22,9 +22,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,34 +36,60 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.diabetesassistant.navigation.AppNavHost
 import com.example.diabetesassistant.navigation.MainDestination
+import com.example.diabetesassistant.ui.screens.AppStateViewModel
+import com.example.diabetesassistant.ui.screens.AuthOnboardingMode
 import com.example.diabetesassistant.ui.screens.AuthOnboardingScreen
 import com.example.diabetesassistant.ui.theme.DiabetesAssistantTheme
 
 @Composable
-fun DiabetesAssistantApp() {
-    val context = LocalContext.current
-    val preferences = remember {
-        context.getSharedPreferences("diabetes_assistant_auth", android.content.Context.MODE_PRIVATE)
-    }
-    var signedIn by remember { mutableStateOf(preferences.getBoolean("signed_in", false)) }
+fun DiabetesAssistantApp(
+    appStateViewModel: AppStateViewModel = hiltViewModel(),
+) {
+    val signedIn by appStateViewModel.signedIn.collectAsStateWithLifecycle()
+    val signedInUserId by appStateViewModel.signedInUserId.collectAsStateWithLifecycle()
+    val onboardingCompleted by appStateViewModel.onboardingCompleted.collectAsStateWithLifecycle()
+    val authState by appStateViewModel.authFormState.collectAsStateWithLifecycle()
+    val onboardingSubmissionState by appStateViewModel.onboardingSubmissionState.collectAsStateWithLifecycle()
+    val guardianDays by appStateViewModel.guardianDays.collectAsStateWithLifecycle()
 
-    if (!signedIn) {
+    if (!signedIn || signedInUserId == null) {
         AuthOnboardingScreen(
-            onFinished = {
-                preferences.edit().putBoolean("signed_in", true).apply()
-                signedIn = true
-            },
+            mode = AuthOnboardingMode.AuthOnly,
+            authState = authState,
+            onboardingSubmissionState = onboardingSubmissionState,
+            onAuthModeChange = appStateViewModel::setRegisterMode,
+            onNicknameChange = appStateViewModel::updateNickname,
+            onAccountChange = appStateViewModel::updateAccount,
+            onPasswordChange = appStateViewModel::updatePassword,
+            onAuthSubmit = appStateViewModel::submitAuth,
+            onCompleteOnboarding = appStateViewModel::completeOnboarding,
+        )
+        return
+    }
+
+    if (!onboardingCompleted) {
+        AuthOnboardingScreen(
+            mode = AuthOnboardingMode.OnboardingOnly,
+            authState = authState,
+            onboardingSubmissionState = onboardingSubmissionState,
+            onAuthModeChange = appStateViewModel::setRegisterMode,
+            onNicknameChange = appStateViewModel::updateNickname,
+            onAccountChange = appStateViewModel::updateAccount,
+            onPasswordChange = appStateViewModel::updatePassword,
+            onAuthSubmit = appStateViewModel::submitAuth,
+            onCompleteOnboarding = appStateViewModel::completeOnboarding,
         )
         return
     }
@@ -70,6 +99,15 @@ fun DiabetesAssistantApp() {
     val currentRoute = navBackStackEntry?.destination?.route
     val currentDestination = MainDestination.fromRoute(currentRoute)
     val showBottomBar = MainDestination.items.any { it.route == currentRoute }
+    var homeEnterToken by rememberSaveable { mutableIntStateOf(0) }
+    var hasShownHomeWelcomeInProcess by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentRoute) {
+        if (currentRoute == MainDestination.Home.route && !hasShownHomeWelcomeInProcess) {
+            homeEnterToken += 1
+            hasShownHomeWelcomeInProcess = true
+        }
+    }
 
     Scaffold(
         containerColor = Color(0xFFF3F7F4),
@@ -85,10 +123,10 @@ fun DiabetesAssistantApp() {
         AppNavHost(
             navController = navController,
             modifier = Modifier.padding(innerPadding),
-            onSignOut = {
-                preferences.edit().clear().apply()
-                signedIn = false
-            },
+            onSignOut = appStateViewModel::signOut,
+            homeEnterToken = homeEnterToken,
+            guardianDays = guardianDays,
+            signedInUserId = signedInUserId,
         )
     }
 }

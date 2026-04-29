@@ -9,12 +9,13 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.runtime.getValue
 
 @Composable
 fun CameraFlowNavHost(
@@ -65,9 +66,23 @@ fun CameraFlowNavHost(
             CameraCaptureScreen(
                 viewModel = viewModel,
                 onExitCamera = onExitCamera,
-                onNavigateToLoading = {
+                onNavigateToPreview = {
+                    nestedNavController.navigate(CameraRoute.Preview)
+                },
+            )
+        }
+        composable(CameraRoute.Preview) {
+            val pendingUriString by viewModel.pendingImageUri.collectAsState()
+            CapturePreviewScreen(
+                imageUriString = pendingUriString.orEmpty(),
+                onRetake = {
+                    viewModel.setPendingCaptureUri("")
+                    nestedNavController.popBackStack()
+                },
+                onConfirm = {
                     nestedNavController.navigate(CameraRoute.Loading)
                 },
+                onBack = { nestedNavController.popBackStack() },
             )
         }
         composable(CameraRoute.Loading) {

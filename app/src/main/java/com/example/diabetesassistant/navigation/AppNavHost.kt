@@ -16,12 +16,13 @@ import com.example.diabetesassistant.ui.screens.ArchiveScreen
 import com.example.diabetesassistant.ui.screens.AiAdviceScreen
 import com.example.diabetesassistant.ui.screens.CameraScreen
 import com.example.diabetesassistant.ui.screens.AnalysisPlanScreen
+import com.example.diabetesassistant.ui.screens.CreatePostScreen
+import com.example.diabetesassistant.ui.screens.CommunityPostDetailScreen
+import com.example.diabetesassistant.ui.screens.CommunityUserProfileScreen
 import com.example.diabetesassistant.ui.screens.DarkModeSettingsScreen
 import com.example.diabetesassistant.ui.screens.ExercisePlanScreen
 import com.example.diabetesassistant.ui.screens.FoodDiaryDetailScreen
 import com.example.diabetesassistant.ui.screens.HomeScreen
-import com.example.diabetesassistant.ui.screens.CommunityPostDetailScreen
-import com.example.diabetesassistant.ui.screens.CommunityUserProfileScreen
 import com.example.diabetesassistant.ui.screens.LifeScreen
 import com.example.diabetesassistant.ui.screens.MealEditScreen
 import com.example.diabetesassistant.ui.screens.MedicationPlanScreen
@@ -37,8 +38,11 @@ fun AppNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier,
     onSignOut: () -> Unit = {},
+    homeEnterToken: Int = 0,
+    guardianDays: Int = 1,
+    signedInUserId: Long? = null,
 ) {
-    val followedUserIds = remember { mutableStateListOf("user-lin") }
+    val followedUserIds = remember { mutableStateListOf("1") }
 
     NavHost(
         navController = navController,
@@ -47,19 +51,24 @@ fun AppNavHost(
     ) {
         composable(MainDestination.Home.route) {
             HomeScreen(
+                welcomeTrigger = homeEnterToken,
+                guardianDays = guardianDays,
                 onScanClick = {
                     navController.navigate(MainDestination.Camera.route) {
                         launchSingleTop = true
                     }
+                },
+                onCreatePostClick = {
+                    navController.navigate(HomeSecondaryRoute.CreatePost)
+                },
+                onPostClick = { postId ->
+                    navController.navigate(HomeSecondaryRoute.postDetail(postId))
                 },
                 onAiAdviceClick = {
                     navController.navigate(HomeSecondaryRoute.AiAdvice)
                 },
                 onTodayRecordsClick = {
                     navController.navigate(HomeSecondaryRoute.FoodDiary)
-                },
-                onPostClick = { postId ->
-                    navController.navigate(HomeSecondaryRoute.postDetail(postId))
                 },
                 followedUserIds = followedUserIds,
                 onAuthorClick = { userId ->
@@ -74,13 +83,27 @@ fun AppNavHost(
                 },
             )
         }
+        composable(HomeSecondaryRoute.CreatePost) {
+            CreatePostScreen(
+                onBackClick = { navController.popBackStack() },
+                signedInUserId = signedInUserId,
+                onPosted = { postId: String ->
+                    navController.navigate(HomeSecondaryRoute.postDetail(postId)) {
+                        popUpTo(HomeSecondaryRoute.CreatePost) {
+                            inclusive = true
+                        }
+                    }
+                },
+            )
+        }
         composable(
             route = HomeSecondaryRoute.PostDetail,
             arguments = listOf(navArgument(HomeSecondaryRoute.PostIdArg) { type = NavType.StringType }),
         ) { entry ->
             CommunityPostDetailScreen(
                 onBackClick = { navController.popBackStack() },
-                postId = entry.arguments?.getString(HomeSecondaryRoute.PostIdArg) ?: "post-1",
+                postId = entry.arguments?.getString(HomeSecondaryRoute.PostIdArg) ?: "1",
+                signedInUserId = signedInUserId,
                 followedUserIds = followedUserIds,
                 onAuthorClick = { userId ->
                     navController.navigate(HomeSecondaryRoute.userProfile(userId))

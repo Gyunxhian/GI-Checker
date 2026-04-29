@@ -1,115 +1,1062 @@
 package com.example.diabetesassistant.ui.screens
 
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Circle
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.LocalDining
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.outlined.Comment
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.example.diabetesassistant.ui.components.GlassCard
-import com.example.diabetesassistant.ui.components.GreenGlassBackground
-import com.example.diabetesassistant.ui.theme.DiabetesAssistantTheme
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.net.URL
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import com.example.diabetesassistant.data.local.entity.Comment
+import com.example.diabetesassistant.data.local.entity.CommunityPost
+import com.example.diabetesassistant.data.local.entity.FoodRecord
+import com.example.diabetesassistant.data.local.entity.User
+import com.example.diabetesassistant.data.repository.CommunityRepository
+import com.example.diabetesassistant.data.repository.FoodRecordRepository
+import com.example.diabetesassistant.data.repository.UserRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import kotlin.math.roundToInt
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
-private val PrimaryGreen = Color(0xFF008A3D)
-private val BrightGreen = Color(0xFF78FF9D)
-private val Ink = Color(0xFF17251E)
-private val MutedInk = Color(0xFF6B7770)
-private val TrackGray = Color(0xFFE5EBE7)
+private enum class HomeFilterTab {
+    RECOMMEND,
+    FOLLOWING,
+    MALL,
+}
 
+private data class SearchHistoryRecord(
+    val query: String,
+    val summary: String,
+    val timeLabel: String,
+)
+
+
+
+@HiltViewModel
+class HomeFeedViewModel @Inject constructor(
+    private val communityRepository: CommunityRepository,
+    userRepository: UserRepository,
+) : ViewModel() {
+    val posts: StateFlow<List<CommunityPost>> = communityRepository.observePosts().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList(),
+    )
+
+    val users: StateFlow<List<User>> = userRepository.observeUsers().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList(),
+    )
+
+    fun setLike(post: CommunityPost, isCurrentlyLoved: Boolean) {
+        viewModelScope.launch {
+            val nextLikeCount = if (isCurrentlyLoved) {
+                (post.likeCount - 1).coerceAtLeast(0)
+            } else {
+                post.likeCount + 1
+            }
+            communityRepository.updatePost(post.copy(likeCount = nextLikeCount))
+        }
+    }
+}
+
+@HiltViewModel
+class CreatePostViewModel @Inject constructor(
+    private val communityRepository: CommunityRepository,
+    foodRecordRepository: FoodRecordRepository,
+) : ViewModel() {
+    val records: StateFlow<List<FoodRecord>> = foodRecordRepository.observeAll().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList(),
+    )
+
+    fun publish(
+        userId: Long,
+        title: String,
+        content: String,
+        postType: String,
+        archiveRecordId: Long?,
+        imagePaths: List<String>,
+        onPosted: (Long) -> Unit,
+    ) {
+        viewModelScope.launch {
+            val newId = communityRepository.createPost(
+                CommunityPost(
+                    userId = userId,
+                    title = title.trim(),
+                    content = content.trim(),
+                    imagePath = imagePaths.joinToString("\n").ifBlank { null },
+                    bloodSugarTag = if (postType == "ARCHIVE_SHARE") "档案分享" else null,
+                    postType = postType,
+                    archiveRecordId = archiveRecordId,
+                )
+            )
+            onPosted(newId)
+        }
+    }
+}
+
+@HiltViewModel
+class CommunityPostDetailViewModel @Inject constructor(
+    private val communityRepository: CommunityRepository,
+    userRepository: UserRepository,
+) : ViewModel() {
+    val users: StateFlow<List<User>> = userRepository.observeUsers().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList(),
+    )
+
+    fun observePost(postId: Long) = communityRepository.observePostById(postId)
+
+    fun observeComments(postId: Long) = communityRepository.observeComments(postId)
+
+    fun setLike(post: CommunityPost, isCurrentlyLoved: Boolean) {
+        viewModelScope.launch {
+            val nextLikeCount = if (isCurrentlyLoved) {
+                (post.likeCount - 1).coerceAtLeast(0)
+            } else {
+                post.likeCount + 1
+            }
+            communityRepository.updatePost(post.copy(likeCount = nextLikeCount))
+        }
+    }
+
+    fun addComment(userId: Long, postId: Long, content: String) {
+        if (content.isBlank()) return
+        viewModelScope.launch {
+            communityRepository.addComment(
+                Comment(
+                    content = content.trim(),
+                    userId = userId,
+                    postId = postId,
+                )
+            )
+            val post = communityRepository.getPostById(postId) ?: return@launch
+            communityRepository.updatePost(post.copy(commentCount = post.commentCount + 1))
+        }
+    }
+
+    fun share(postId: Long) {
+        viewModelScope.launch {
+            communityRepository.getPostById(postId)
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
+    welcomeTrigger: Int = 0,
+    guardianDays: Int = 1,
     onScanClick: () -> Unit = {},
+    onCreatePostClick: () -> Unit = {},
     onAiAdviceClick: () -> Unit = {},
     onTodayRecordsClick: () -> Unit = {},
     onPostClick: (String) -> Unit = {},
     followedUserIds: List<String> = emptyList(),
     onAuthorClick: (String) -> Unit = {},
     onFollowClick: (String) -> Unit = {},
+    viewModel: HomeFeedViewModel = hiltViewModel(),
 ) {
-    var selectedFeed by remember { mutableStateOf("推荐") }
-    val visiblePosts = when (selectedFeed) {
-        "关注" -> communityPosts.filter { followedUserIds.contains(it.authorId) }
-        "最新" -> communityPosts.sortedByDescending { it.id }
-        else -> communityPosts
+    val posts by viewModel.posts.collectAsStateWithLifecycle()
+    val users by viewModel.users.collectAsStateWithLifecycle()
+    val userNameMap = remember(users) { users.associate { it.id to it.nickname } }
+    val listState = rememberLazyListState()
+    var tab by rememberSaveable { mutableStateOf(HomeFilterTab.RECOMMEND) }
+    var searchMode by rememberSaveable { mutableStateOf(false) }
+    var searchDraftText by rememberSaveable { mutableStateOf("") }
+    var activeSearchQuery by rememberSaveable { mutableStateOf("") }
+    var welcomeManualTrigger by rememberSaveable { mutableIntStateOf(0) }
+    var welcomeDismissToken by rememberSaveable { mutableIntStateOf(0) }
+    var hasDismissedWelcomeInSession by rememberSaveable { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
+    var pullDistance by remember { mutableStateOf(0f) }
+    var pullTriggered by remember { mutableStateOf(false) }
+
+    LaunchedEffect(welcomeTrigger) {
+        if (welcomeTrigger > welcomeDismissToken) {
+            welcomeDismissToken = welcomeTrigger
+            hasDismissedWelcomeInSession = false
+        }
     }
 
-    GreenGlassBackground(modifier = modifier) {
+    val pullDownConnection = remember(listState) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val isAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+                if (source == NestedScrollSource.UserInput && isAtTop && available.y > 0f) {
+                    pullDistance += available.y
+                    if (pullDistance >= 120f && !pullTriggered) {
+                        pullTriggered = true
+                        hasDismissedWelcomeInSession = false
+                        welcomeManualTrigger += 1
+                    }
+                } else {
+                    pullDistance = 0f
+                    pullTriggered = false
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
+                pullDistance = 0f
+                pullTriggered = false
+                return androidx.compose.ui.unit.Velocity.Zero
+            }
+        }
+    }
+
+    val searchHistoryRecords = remember(posts) { buildSearchHistoryRecords(posts) }
+    var historyRecords by remember { mutableStateOf<List<SearchHistoryRecord>>(emptyList()) }
+
+    var historyInitialized by rememberSaveable { mutableStateOf(false) }
+
+    fun submitSearch(rawQuery: String) {
+        val query = rawQuery.trim()
+        activeSearchQuery = query
+        if (query.isBlank()) return
+        historyRecords = listOf(
+            SearchHistoryRecord(query = query, summary = "搜索记录", timeLabel = "刚刚"),
+        ) + historyRecords.filterNot { it.query.equals(query, ignoreCase = true) }
+    }
+
+    LaunchedEffect(searchHistoryRecords) {
+        if (!historyInitialized) {
+            historyRecords = searchHistoryRecords
+            historyInitialized = true
+        }
+    }
+
+    val filteredPosts = remember(posts, tab, followedUserIds) {
+        posts.filter { post ->
+            when (tab) {
+                HomeFilterTab.RECOMMEND -> post.postType != "MALL"
+                HomeFilterTab.FOLLOWING -> {
+                    followedUserIds.contains(post.userId.toString()) && post.postType != "MALL"
+                }
+                HomeFilterTab.MALL -> post.postType == "MALL"
+            }
+        }
+    }
+
+    val searchResultPosts = remember(posts, activeSearchQuery) {
+        if (activeSearchQuery.isBlank()) {
+            emptyList()
+        } else {
+            posts.filter {
+                it.title.contains(activeSearchQuery, ignoreCase = true) ||
+                    it.content.contains(activeSearchQuery, ignoreCase = true)
+            }
+        }
+    }
+
+    val displayPosts = filteredPosts
+
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(pullDownConnection),
+        ) {
+            stickyHeader {
+                HomeTopBar(
+                    searchMode = searchMode,
+                    searchText = searchDraftText,
+                    selectedTab = tab,
+                    onCreatePostClick = onCreatePostClick,
+                    onSearchModeChange = { enabled ->
+                        searchMode = enabled
+                        if (!enabled) {
+                            activeSearchQuery = ""
+                        }
+                        if (enabled) keyboard?.show() else keyboard?.hide()
+                    },
+                    onSearchTextChange = { searchDraftText = it },
+                    onSearchSubmit = { submitSearch(searchDraftText) },
+                    onTabChange = { tab = it },
+                )
+            }
+
+            item {
+                HomeQuickActions(
+                    onScanClick = onScanClick,
+                    onAiAdviceClick = onAiAdviceClick,
+                    onTodayRecordsClick = onTodayRecordsClick,
+                )
+            }
+
+            item {
+                if (searchMode) {
+                    SearchHistorySection(
+                        records = historyRecords,
+                        searchText = searchDraftText,
+                        activeQuery = activeSearchQuery,
+                        searchResultCount = searchResultPosts.size,
+                        onRecordClick = { query ->
+                            searchDraftText = query
+                            submitSearch(query)
+                        },
+                        onDeleteRecord = { query -> historyRecords = historyRecords.filterNot { it.query == query } },
+                        onClearAll = { historyRecords = emptyList() },
+                    )
+                    if (activeSearchQuery.isNotBlank()) {
+                        HomeFeedGrid(
+                            posts = searchResultPosts,
+                            onPostClick = onPostClick,
+                            onAuthorClick = onAuthorClick,
+                            onFollowClick = onFollowClick,
+                            followedUserIds = followedUserIds,
+                            authorNames = userNameMap,
+                            onLoveToggle = { post, isLoved -> viewModel.setLike(post, isLoved) },
+                        )
+                    }
+                } else {
+                    HomeFeedGrid(
+                        posts = displayPosts,
+                        onPostClick = onPostClick,
+                        onAuthorClick = onAuthorClick,
+                        onFollowClick = onFollowClick,
+                        followedUserIds = followedUserIds,
+                        authorNames = userNameMap,
+                        onLoveToggle = { post, isLoved -> viewModel.setLike(post, isLoved) },
+                    )
+                }
+            }
+        }
+
+        WelcomeOverlay(
+            trigger = welcomeTrigger + welcomeManualTrigger,
+            guardianDays = guardianDays,
+            shouldShowInitially = !hasDismissedWelcomeInSession,
+            onDismissed = { hasDismissedWelcomeInSession = true },
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+@Composable
+private fun HomeTopBar(
+    searchMode: Boolean,
+    searchText: String,
+    selectedTab: HomeFilterTab,
+    onCreatePostClick: () -> Unit,
+    onSearchModeChange: (Boolean) -> Unit,
+    onSearchTextChange: (String) -> Unit,
+    onSearchSubmit: () -> Unit,
+    onTabChange: (HomeFilterTab) -> Unit,
+) {
+    val searchWidth by animateDpAsState(targetValue = if (searchMode) 260.dp else 0.dp, label = "searchWidth")
+
+    Surface(shadowElevation = 4.dp, tonalElevation = 1.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (searchMode) {
+                IconButton(onClick = { onSearchModeChange(false) }) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                }
+                OutlinedTextField(
+                    value = searchText,
+                    onValueChange = onSearchTextChange,
+                    modifier = Modifier.width(searchWidth),
+                    singleLine = true,
+                    placeholder = { Text("搜索帖子") },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onSearchSubmit() }),
+                )
+            } else {
+                IconButton(onClick = onCreatePostClick) {
+                    Icon(Icons.Default.Add, contentDescription = "发帖")
+                }
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    FilterChip(
+                        selected = selectedTab == HomeFilterTab.RECOMMEND,
+                        onClick = { onTabChange(HomeFilterTab.RECOMMEND) },
+                        label = { Text("推荐") },
+                    )
+                    Box(modifier = Modifier.width(6.dp))
+                    FilterChip(
+                        selected = selectedTab == HomeFilterTab.FOLLOWING,
+                        onClick = { onTabChange(HomeFilterTab.FOLLOWING) },
+                        label = { Text("关注") },
+                    )
+                    Box(modifier = Modifier.width(6.dp))
+                    FilterChip(
+                        selected = selectedTab == HomeFilterTab.MALL,
+                        onClick = { onTabChange(HomeFilterTab.MALL) },
+                        label = { Text("商城") },
+                    )
+                }
+                IconButton(onClick = { onSearchModeChange(true) }) {
+                    Icon(Icons.Default.Search, contentDescription = "搜索")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeQuickActions(
+    onScanClick: () -> Unit,
+    onAiAdviceClick: () -> Unit,
+    onTodayRecordsClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        AssistChip(onClick = onScanClick, label = { Text("拍照识别") })
+        AssistChip(onClick = onAiAdviceClick, label = { Text("AI 建议") })
+        AssistChip(onClick = onTodayRecordsClick, label = { Text("今日档案") })
+    }
+}
+
+@Composable
+private fun SearchHistorySection(
+    records: List<SearchHistoryRecord>,
+    searchText: String,
+    activeQuery: String,
+    searchResultCount: Int,
+    onRecordClick: (String) -> Unit,
+    onDeleteRecord: (String) -> Unit,
+    onClearAll: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var showClearConfirm by rememberSaveable { mutableStateOf(false) }
+    val visibleRecords = remember(records, searchText) {
+        if (searchText.isBlank()) {
+            records
+        } else {
+            records.filter {
+                it.query.contains(searchText, ignoreCase = true) ||
+                    it.summary.contains(searchText, ignoreCase = true)
+            }
+        }
+    }
+
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text("清空历史记录") },
+            text = { Text("确认清空全部搜索历史？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onClearAll()
+                    showClearConfirm = false
+                }) {
+                    Text("确认")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
+
+    if (visibleRecords.isEmpty()) {
+        Box(modifier = modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
+            Text("暂无历史搜索")
+        }
+        return
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (activeQuery.isNotBlank()) {
+            Text(
+                text = "“$activeQuery” 搜索结果 $searchResultCount 条",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF4B9B6E),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "历史记录",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFF2E7E5D),
+            )
+            TextButton(onClick = { showClearConfirm = true }) {
+                Text("清空")
+            }
+        }
+        visibleRecords.forEach { record ->
+            Card(
+                onClick = { onRecordClick(record.query) },
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(record.query, style = MaterialTheme.typography.titleSmall)
+                        Text(record.summary, style = MaterialTheme.typography.bodySmall, color = Color(0xFF3E5D4F))
+                        Text(record.timeLabel, style = MaterialTheme.typography.labelSmall, color = Color(0xFF4B9B6E))
+                    }
+                    IconButton(onClick = { onDeleteRecord(record.query) }) {
+                        Icon(Icons.Default.Delete, contentDescription = "删除历史")
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun HomeFeedGrid(
+    posts: List<CommunityPost>,
+    onPostClick: (String) -> Unit,
+    onAuthorClick: (String) -> Unit,
+    onFollowClick: (String) -> Unit,
+    followedUserIds: List<String>,
+    authorNames: Map<Long, String>,
+    onLoveToggle: (CommunityPost, Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (posts.isEmpty()) {
+        Box(modifier = modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
+            Text("暂无帖子，点击左上角发帖")
+        }
+        return
+    }
+
+    val leftColumn = remember(posts) { posts.filterIndexed { index, _ -> index % 2 == 0 } }
+    val rightColumn = remember(posts) { posts.filterIndexed { index, _ -> index % 2 == 1 } }
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    val cardWidth = (screenWidth - 24.dp - 10.dp) / 2
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(
+            modifier = Modifier.width(cardWidth),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            leftColumn.forEach { post ->
+                CommunityPostCard(
+                    post = post,
+                    authorName = authorNames[post.userId] ?: "用户${post.userId}",
+                    isFollowingAuthor = followedUserIds.contains(post.userId.toString()),
+                    onPostClick = { onPostClick(post.id.toString()) },
+                    onAuthorClick = { onAuthorClick(post.userId.toString()) },
+                    onFollowClick = { onFollowClick(post.userId.toString()) },
+                    onLoveToggle = { isLoved -> onLoveToggle(post, isLoved) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier.width(cardWidth),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            rightColumn.forEach { post ->
+                CommunityPostCard(
+                    post = post,
+                    authorName = authorNames[post.userId] ?: "用户${post.userId}",
+                    isFollowingAuthor = followedUserIds.contains(post.userId.toString()),
+                    onPostClick = { onPostClick(post.id.toString()) },
+                    onAuthorClick = { onAuthorClick(post.userId.toString()) },
+                    onFollowClick = { onFollowClick(post.userId.toString()) },
+                    onLoveToggle = { isLoved -> onLoveToggle(post, isLoved) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommunityPostCard(
+    post: CommunityPost,
+    authorName: String,
+    isFollowingAuthor: Boolean,
+    onPostClick: () -> Unit,
+    onAuthorClick: () -> Unit,
+    onFollowClick: () -> Unit,
+    onLoveToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var isLoved by rememberSaveable(post.id) { mutableStateOf(false) }
+
+    Card(
+        onClick = onPostClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = if (post.postType == "MALL") Color(0xFFF8FAF9) else Color.White),
+    ) {
+        if (post.postType == "MALL") {
+            ProductPostCardContent(
+                post = post,
+                authorName = authorName,
+                isFollowingAuthor = isFollowingAuthor,
+                onAuthorClick = onAuthorClick,
+                onFollowClick = onFollowClick,
+                onPostClick = onPostClick,
+            )
+        } else {
+            UgcPostCardContent(
+                post = post,
+                authorName = authorName,
+                isFollowingAuthor = isFollowingAuthor,
+                onAuthorClick = onAuthorClick,
+                onFollowClick = onFollowClick,
+                onPostClick = onPostClick,
+                onLoveToggle = onLoveToggle,
+                isLoved = isLoved,
+                onLovedStateChange = { isLoved = it },
+            )
+        }
+    }
+}
+
+@Composable
+private fun UgcPostCardContent(
+    post: CommunityPost,
+    authorName: String,
+    isFollowingAuthor: Boolean,
+    onAuthorClick: () -> Unit,
+    onFollowClick: () -> Unit,
+    onPostClick: () -> Unit,
+    onLoveToggle: (Boolean) -> Unit,
+    isLoved: Boolean,
+    onLovedStateChange: (Boolean) -> Unit,
+) {
+    val imageEntries = remember(post.imagePath) {
+        post.imagePath?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(if (post.id % 2L == 0L) 176.dp else 212.dp)
+                .background(Color(0xFFE8F3EE), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(if (imageEntries.isEmpty()) "UGC 图片" else "UGC 图片 ${imageEntries.size} 张")
+        }
+        Column(modifier = Modifier.padding(horizontal = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(post.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                post.content,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF3E5D4F),
+            )
+            post.bloodSugarTag?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF2E7E5D),
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(onClick = onAuthorClick, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)) {
+                Text(authorName)
+            }
+            Button(onClick = onFollowClick, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)) {
+                Text(if (isFollowingAuthor) "已关注" else "关注")
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp)
+                .padding(bottom = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(onClick = {
+                    onLoveToggle(isLoved)
+                    onLovedStateChange(!isLoved)
+                }) {
+                    Icon(Icons.Default.Favorite, contentDescription = "Love")
+                }
+                Text(post.likeCount.toString(), style = MaterialTheme.typography.labelSmall)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(onClick = onPostClick) {
+                    Icon(Icons.AutoMirrored.Outlined.Comment, contentDescription = "Review")
+                }
+                Text(post.commentCount.toString(), style = MaterialTheme.typography.labelSmall)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(onClick = onPostClick) {
+                    Icon(Icons.Default.Share, contentDescription = "Share")
+                }
+                Text("0", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProductPostCardContent(
+    post: CommunityPost,
+    authorName: String,
+    isFollowingAuthor: Boolean,
+    onAuthorClick: () -> Unit,
+    onFollowClick: () -> Unit,
+    onPostClick: () -> Unit,
+) {
+    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp)
+                .background(Color(0xFFEFF5F2), RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("商品图")
+        }
+        Text(post.title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+        Text(post.content, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+        Text(post.bloodSugarTag ?: "", color = Color(0xFF1A5F3A), style = MaterialTheme.typography.titleSmall)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onClick = onAuthorClick) { Text(authorName) }
+            TextButton(onClick = onFollowClick) { Text(if (isFollowingAuthor) "已关注店铺" else "关注店铺") }
+        }
+        Button(onClick = onPostClick, modifier = Modifier.fillMaxWidth()) {
+            Text("查看商品详情")
+        }
+    }
+}
+
+@Composable
+private fun WelcomeOverlay(
+    trigger: Int,
+    guardianDays: Int,
+    shouldShowInitially: Boolean,
+    onDismissed: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    val offsetY = remember { Animatable(0f) }
+    var visible by rememberSaveable(trigger) { mutableStateOf(shouldShowInitially) }
+
+    LaunchedEffect(trigger, shouldShowInitially) {
+        visible = shouldShowInitially
+        if (shouldShowInitially) {
+            offsetY.snapTo(0f)
+        }
+    }
+
+    AnimatedVisibility(visible = visible) {
+        Box(
+            modifier = modifier
+                .offset { IntOffset(x = 0, y = offsetY.value.roundToInt()) }
+                .background(Color(0xFFEAF6EF))
+                .pointerInput(trigger) {
+                    detectVerticalDragGestures(
+                        onVerticalDrag = { _, dragAmount ->
+                            if (dragAmount < 0) {
+                                scope.launch {
+                                    offsetY.snapTo((offsetY.value + dragAmount).coerceAtMost(0f))
+                                }
+                            }
+                        },
+                        onDragEnd = {
+                            scope.launch {
+                                if (offsetY.value < -120f) {
+                                    offsetY.animateTo(
+                                        targetValue = -screenHeightPx,
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                            stiffness = Spring.StiffnessMedium,
+                                        ),
+                                    )
+                                    visible = false
+                                    onDismissed()
+                                } else {
+                                    offsetY.animateTo(0f, spring())
+                                }
+                            }
+                        },
+                    )
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "血糖助手已守护您",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Color(0xFF2E7E5D),
+                )
+                Text(
+                    text = "$guardianDays 天了",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Color(0xFF2E7E5D),
+                )
+                Text(
+                    text = "↑ 上滑探索",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF4B9B6E),
+                    modifier = Modifier.padding(top = 20.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CreatePostScreen(
+    onBackClick: () -> Unit,
+    onPosted: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    signedInUserId: Long? = null,
+    viewModel: CreatePostViewModel = hiltViewModel(),
+) {
+    val records by viewModel.records.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var title by rememberSaveable { mutableStateOf("") }
+    var content by rememberSaveable { mutableStateOf("") }
+    var postType by rememberSaveable { mutableStateOf("FREE_TEXT") }
+    var archiveRecordId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var selectedImagePaths by rememberSaveable { mutableStateOf(listOf<String>()) }
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        val persistedUris = uris.mapNotNull { uri ->
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+                uri.toString()
+            }.getOrNull()
+        }
+        selectedImagePaths = persistedUris
+    }
+
+    Surface(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp)
-                .padding(top = 14.dp, bottom = 22.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            CommunitySearchBar()
-            CommunityFilterTabs(selectedFeed = selectedFeed, onSelect = { selectedFeed = it })
-            if (visiblePosts.isEmpty()) {
-                EmptyFollowingCard()
-            } else {
-                CommunityWaterfall(
-                    posts = visiblePosts,
-                    followedUserIds = followedUserIds,
-                    onPostClick = onPostClick,
-                    onAuthorClick = onAuthorClick,
-                    onFollowClick = onFollowClick,
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onBackClick) { Text("返回") }
+                Text("发帖", style = MaterialTheme.typography.headlineSmall)
+            }
+
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("标题") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = content,
+                onValueChange = { content = it },
+                label = { Text("正文") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp),
+            )
+
+            Text("帖子类型")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = postType == "FREE_TEXT",
+                    onClick = { postType = "FREE_TEXT"; archiveRecordId = null },
+                    label = { Text("自由图文") },
                 )
+                FilterChip(
+                    selected = postType == "ARCHIVE_SHARE",
+                    onClick = { postType = "ARCHIVE_SHARE" },
+                    label = { Text("档案分享") },
+                )
+                FilterChip(
+                    selected = postType == "MALL",
+                    onClick = { postType = "MALL"; archiveRecordId = null },
+                    label = { Text("商城") },
+                )
+            }
+
+            Button(onClick = { imagePickerLauncher.launch(arrayOf("image/*")) }) {
+                Text(if (selectedImagePaths.isEmpty()) "上传图片（可多选）" else "已选 ${selectedImagePaths.size} 张，重新选择")
+            }
+            if (selectedImagePaths.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(selectedImagePaths) { path ->
+                        Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF6EF))) {
+                            Text(
+                                text = path.substringAfterLast('/'),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (postType == "ARCHIVE_SHARE") {
+                Text("关联档案")
+                records.take(5).forEach { record ->
+                    FilterChip(
+                        selected = archiveRecordId == record.id,
+                        onClick = { archiveRecordId = record.id },
+                        label = { Text("${record.dishName} #${record.id}") },
+                    )
+                }
+            }
+
+            Button(
+                onClick = {
+                    val userId = signedInUserId ?: 1L
+                    viewModel.publish(
+                        userId = userId,
+                        title = title,
+                        content = content,
+                        postType = postType,
+                        archiveRecordId = archiveRecordId,
+                        imagePaths = selectedImagePaths,
+                    ) { newPostId ->
+                        onPosted(newPostId.toString())
+                    }
+                },
+                enabled = title.isNotBlank() && content.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("发布")
             }
         }
     }
@@ -123,403 +1070,253 @@ fun CommunityPostDetailScreen(
     followedUserIds: List<String> = emptyList(),
     onAuthorClick: (String) -> Unit = {},
     onFollowClick: (String) -> Unit = {},
+    signedInUserId: Long? = null,
+    viewModel: CommunityPostDetailViewModel = hiltViewModel(),
 ) {
-    val post = communityPosts.find { it.id == postId } ?: communityPosts.first()
-    val user = communityUsers.first { it.id == post.authorId }
-    val isFollowing = followedUserIds.contains(user.id)
-    GreenGlassBackground(modifier = modifier) {
-        Column(
+    val postIdLong = postId.toLongOrNull()
+    if (postIdLong == null) {
+        Surface(modifier = modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("帖子不存在")
+                Button(onClick = onBackClick) { Text("返回") }
+            }
+        }
+        return
+    }
+
+    val post by viewModel.observePost(postIdLong).collectAsStateWithLifecycle(initialValue = null)
+    val comments by viewModel.observeComments(postIdLong).collectAsStateWithLifecycle(initialValue = emptyList())
+    val users by viewModel.users.collectAsStateWithLifecycle()
+    val userNameMap = remember(users) { users.associate { it.id to it.nickname } }
+    val userId = signedInUserId ?: 1L
+    var isLoved by rememberSaveable(postIdLong) { mutableStateOf(false) }
+    var shareCount by rememberSaveable(postIdLong) { mutableIntStateOf(0) }
+    var commentInput by rememberSaveable { mutableStateOf("") }
+
+    if (post == null) {
+        Surface(modifier = modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = onBackClick) { Text("返回") }
+                    Text("详情", style = MaterialTheme.typography.headlineSmall)
+                }
+                Text("帖子加载中或已删除")
+            }
+        }
+        return
+    }
+
+    val authorName = userNameMap[post!!.userId] ?: "用户${post!!.userId}"
+    val detailTime = remember(post!!.createdAt) {
+        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(post!!.createdAt))
+    }
+    val detailImageEntries = remember(post!!.imagePath) {
+        post!!.imagePath?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+    }
+
+    val displayComments = remember(comments, post!!.commentCount) {
+        val targetCount = post!!.commentCount.coerceAtLeast(0)
+        val base = comments.take(targetCount)
+        if (base.size >= targetCount) {
+            base
+        } else {
+            val needed = targetCount - base.size
+            val filler = (1..needed).map { index ->
+                Comment(
+                    content = "很有帮助，已收藏（示例评论 $index）",
+                    userId = ((index % 6) + 11).toLong(),
+                    postId = postIdLong,
+                )
+            }
+            (base + filler).take(targetCount)
+        }
+    }
+
+    Surface(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp)
-                .padding(top = 12.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Surface(onClick = onBackClick, shape = CircleShape, color = Color.Transparent) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        tint = PrimaryGreen,
-                        modifier = Modifier
-                            .padding(6.dp)
-                            .size(22.dp),
-                    )
-                }
-                Text(
-                    text = "帖子详情",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = PrimaryGreen,
-                    fontWeight = FontWeight.ExtraBold,
-                )
-                Icon(Icons.Filled.Bookmark, contentDescription = null, tint = PrimaryGreen)
-            }
-
-            PostVisual(
-                imageUrl = post.imageUrl,
-                color = post.color,
-                height = 250,
-                title = post.mealName,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            GlassCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
-                Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    CommunityAuthorRow(
-                        post = post,
-                        onClick = { onAuthorClick(user.id) },
-                    )
-                    FollowButton(
-                        followed = isFollowing,
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = { onFollowClick(user.id) },
-                    )
-                    Text(
-                        text = post.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Ink,
-                        fontWeight = FontWeight.ExtraBold,
-                    )
-                    Text(
-                        text = post.body,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF405149),
-                        fontWeight = FontWeight.SemiBold,
-                        lineHeight = MaterialTheme.typography.bodyMedium.lineHeight,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        StatusChip(post.glucoseTag, PrimaryGreen)
-                        StatusChip(post.postType, Color(0xFF3E8BFF))
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        SocialMetric(Icons.Filled.Favorite, post.likes)
-                        SocialMetric(Icons.Filled.ChatBubble, post.comments)
-                        SocialMetric(Icons.Filled.Bookmark, post.saves)
-                    }
-                }
-            }
-
-            Text(
-                text = "评论",
-                style = MaterialTheme.typography.titleMedium,
-                color = Ink,
-                fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier.padding(start = 4.dp),
-            )
-            CommentCard("李楠", "这个搭配看起来很稳，我也准备把米饭换成半份。")
-            CommentCard("糖友小周", "餐后散步 20 分钟真的有帮助，感谢分享。")
-        }
-    }
-}
-
-@Composable
-private fun CommunitySearchBar() {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.74f),
-        shadowElevation = 8.dp,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Icon(Icons.Filled.Search, contentDescription = null, tint = MutedInk, modifier = Modifier.size(21.dp))
-            Text(
-                text = "搜索餐食经验、控糖记录",
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MutedInk,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Icon(Icons.Filled.Tune, contentDescription = null, tint = PrimaryGreen, modifier = Modifier.size(21.dp))
-        }
-    }
-}
-
-@Composable
-private fun CommunityFilterTabs(
-    selectedFeed: String,
-    onSelect: (String) -> Unit,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        listOf("推荐", "最新", "关注").forEach { title ->
-            Surface(
-                onClick = { onSelect(title) },
-                shape = RoundedCornerShape(50),
-                color = if (selectedFeed == title) BrightGreen else Color.White.copy(alpha = 0.62f),
-            ) {
-                Text(
-                    text = title,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (selectedFeed == title) PrimaryGreen else MutedInk,
-                    fontWeight = FontWeight.ExtraBold,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CommunityWaterfall(
-    posts: List<CommunityPost>,
-    followedUserIds: List<String>,
-    onPostClick: (String) -> Unit,
-    onAuthorClick: (String) -> Unit,
-    onFollowClick: (String) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            posts.filterIndexed { index, _ -> index % 2 == 0 }.forEach { post ->
-                CommunityPostCard(
-                    post = post,
-                    followed = followedUserIds.contains(post.authorId),
-                    onClick = { onPostClick(post.id) },
-                    onAuthorClick = { onAuthorClick(post.authorId) },
-                    onFollowClick = { onFollowClick(post.authorId) },
-                )
-            }
-        }
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            posts.filterIndexed { index, _ -> index % 2 == 1 }.forEach { post ->
-                CommunityPostCard(
-                    post = post,
-                    followed = followedUserIds.contains(post.authorId),
-                    onClick = { onPostClick(post.id) },
-                    onAuthorClick = { onAuthorClick(post.authorId) },
-                    onFollowClick = { onFollowClick(post.authorId) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmptyFollowingCard() {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        containerColor = Color.White.copy(alpha = 0.70f),
-    ) {
-        Column(
-            modifier = Modifier.padding(22.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(
-                imageVector = Icons.Filled.Favorite,
-                contentDescription = null,
-                tint = PrimaryGreen,
-                modifier = Modifier.size(30.dp),
-            )
-            Text(
-                text = "还没有关注内容",
-                style = MaterialTheme.typography.titleMedium,
-                color = Ink,
-                fontWeight = FontWeight.ExtraBold,
-            )
-            Text(
-                text = "关注其他用户后，他们的新帖子会出现在这里。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MutedInk,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-    }
-}
-
-@Composable
-private fun CommunityPostCard(
-    post: CommunityPost,
-    followed: Boolean,
-    onClick: () -> Unit,
-    onAuthorClick: () -> Unit,
-    onFollowClick: () -> Unit,
-) {
-    GlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        elevation = 8.dp,
-        containerColor = Color.White.copy(alpha = 0.72f),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            PostVisual(
-                imageUrl = post.imageUrl,
-                color = post.color,
-                height = post.imageHeight,
-                title = post.mealName,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Column(
-                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(9.dp),
-            ) {
-                Text(
-                    text = post.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = Ink,
-                    fontWeight = FontWeight.ExtraBold,
-                )
-                StatusChip(post.glucoseTag, PrimaryGreen)
-                CommunityAuthorRow(post = post, compact = true, onClick = onAuthorClick)
-                FollowButton(followed = followed, compact = true, onClick = onFollowClick)
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SocialMetric(Icons.Filled.Favorite, post.likes)
-                    SocialMetric(Icons.Filled.ChatBubble, post.comments)
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = onBackClick) { Text("返回") }
+                    Text(
+                        if (post!!.postType == "MALL") "商品详情" else "帖子详情",
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
                 }
             }
-        }
-    }
-}
 
-@Composable
-private fun PostVisual(
-    imageUrl: String,
-    color: Color,
-    height: Int,
-    title: String,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .height(height.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(color),
-    ) {
-        RemoteImage(
-            url = imageUrl,
-            contentDescription = title,
-            modifier = Modifier.fillMaxSize(),
-            fallbackColor = color,
-        )
-        Text(
-            text = title,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(12.dp),
-            style = MaterialTheme.typography.labelLarge,
-            color = Color.White,
-            fontWeight = FontWeight.ExtraBold,
-        )
-    }
-}
+            item {
+                if (post!!.postType == "MALL") {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(220.dp)
+                                    .background(Color(0xFFEFF5F2), RoundedCornerShape(14.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    if (detailImageEntries.isEmpty()) "商品详情图" else "商品详情图 ${detailImageEntries.size} 张",
+                                )
+                            }
+                            Text(post!!.title, style = MaterialTheme.typography.titleLarge)
+                            Text(post!!.bloodSugarTag ?: "", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF1A5F3A))
+                            Text(post!!.content, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF3E5D4F))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("店铺：$authorName", style = MaterialTheme.typography.titleSmall)
+                                    Text("发货：当日/次日", style = MaterialTheme.typography.bodySmall, color = Color(0xFF4B9B6E))
+                                }
+                                TextButton(onClick = { onFollowClick(post!!.userId.toString()) }) {
+                                    val isFollowing = followedUserIds.contains(post!!.userId.toString())
+                                    Text(if (isFollowing) "已关注" else "关注店铺")
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Button(
+                                    onClick = { /* TODO */ },
+                                    modifier = Modifier.weight(1f),
+                                ) { Text("加入购物车") }
+                                Button(
+                                    onClick = { /* TODO */ },
+                                    modifier = Modifier.weight(1f),
+                                ) { Text("立即购买") }
+                            }
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .background(Color(0xFFE8F3EE), RoundedCornerShape(14.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            if (detailImageEntries.isEmpty()) "帖子详情图" else "帖子详情图 ${detailImageEntries.size} 张",
+                        )
+                    }
+                    if (detailImageEntries.isNotEmpty()) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(detailImageEntries) { path ->
+                                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(10.dp)) {
+                                    Text(
+                                        text = path.substringAfterLast('/'),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Text(post!!.title, style = MaterialTheme.typography.titleLarge)
+                    Text("作者：$authorName", style = MaterialTheme.typography.bodyMedium)
+                    Text("发布时间：$detailTime", style = MaterialTheme.typography.bodySmall, color = Color(0xFF4B9B6E))
+                    Text(post!!.content)
+                    post!!.bloodSugarTag?.let { tag ->
+                        Text(tag, color = Color(0xFF2E7E5D))
+                    }
+                }
+            }
 
-@Composable
-private fun CommunityAuthorRow(
-    post: CommunityPost,
-    compact: Boolean = false,
-    onClick: () -> Unit = {},
-) {
-    val user = communityUsers.first { it.id == post.authorId }
-    Row(
-        modifier = Modifier.clickable(onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(if (compact) 24.dp else 34.dp)
-                .clip(CircleShape)
-                .background(BrightGreen.copy(alpha = 0.55f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            RemoteImage(
-                url = user.avatarUrl,
-                contentDescription = user.name,
-                modifier = Modifier.fillMaxSize(),
-                fallbackColor = BrightGreen.copy(alpha = 0.55f),
-            )
-        }
-        Column(modifier = Modifier.weight(1f, fill = false)) {
-            Text(
-                text = user.name,
-                style = MaterialTheme.typography.labelMedium,
-                color = Ink,
-                fontWeight = FontWeight.ExtraBold,
-            )
-            if (!compact) {
-                Text(
-                    text = post.time,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MutedInk,
-                    fontWeight = FontWeight.Bold,
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { onAuthorClick(post!!.userId.toString()) }) { Text(authorName) }
+                    Button(onClick = { onFollowClick(post!!.userId.toString()) }) {
+                        val isFollowing = followedUserIds.contains(post!!.userId.toString())
+                        Text(if (isFollowing) "已关注" else "关注")
+                    }
+                }
+            }
+
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = {
+                            viewModel.setLike(post!!, isLoved)
+                            isLoved = !isLoved
+                        }) {
+                            Icon(Icons.Default.Favorite, contentDescription = null)
+                        }
+                        Text(post!!.likeCount.toString(), style = MaterialTheme.typography.labelSmall)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = { }) {
+                            Icon(Icons.AutoMirrored.Outlined.Comment, contentDescription = null)
+                        }
+                        Text(post!!.commentCount.toString(), style = MaterialTheme.typography.labelSmall)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = {
+                            viewModel.share(postIdLong)
+                            shareCount += 1
+                        }) {
+                            Icon(Icons.Default.Share, contentDescription = null)
+                        }
+                        Text(shareCount.toString(), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+
+            item { Text("评论区", style = MaterialTheme.typography.titleMedium) }
+
+            item {
+                OutlinedTextField(
+                    value = commentInput,
+                    onValueChange = { commentInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("输入评论") },
                 )
+                Button(
+                    onClick = {
+                        viewModel.addComment(userId, postIdLong, commentInput)
+                        commentInput = ""
+                    },
+                    enabled = commentInput.isNotBlank(),
+                ) {
+                    Text("发送")
+                }
             }
-        }
-    }
-}
 
-@Composable
-private fun StatusChip(text: String, color: Color) {
-    Surface(shape = RoundedCornerShape(50), color = color.copy(alpha = 0.12f)) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            fontWeight = FontWeight.ExtraBold,
-        )
-    }
-}
-
-@Composable
-private fun SocialMetric(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    text: String,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Icon(icon, contentDescription = null, tint = MutedInk, modifier = Modifier.size(14.dp))
-        Text(text, style = MaterialTheme.typography.labelSmall, color = MutedInk, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun CommentCard(author: String, body: String) {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        containerColor = Color.White.copy(alpha = 0.68f),
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .background(Color(0xFFE6F8EC), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(author.take(1), color = PrimaryGreen, fontWeight = FontWeight.ExtraBold)
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(author, style = MaterialTheme.typography.labelLarge, color = Ink, fontWeight = FontWeight.ExtraBold)
-                Text(body, style = MaterialTheme.typography.bodySmall, color = MutedInk, fontWeight = FontWeight.SemiBold)
+            items(displayComments) { comment ->
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            userNameMap[comment.userId] ?: "用户${comment.userId}",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Text(comment.content)
+                    }
+                }
             }
         }
     }
@@ -529,686 +1326,118 @@ private fun CommentCard(author: String, body: String) {
 fun CommunityUserProfileScreen(
     onBackClick: () -> Unit,
     userId: String,
-    followedUserIds: List<String>,
-    onFollowClick: (String) -> Unit,
-    onPostClick: (String) -> Unit,
     modifier: Modifier = Modifier,
+    followedUserIds: List<String> = emptyList(),
+    onFollowClick: (String) -> Unit = {},
+    onPostClick: (String) -> Unit = {},
+    feedViewModel: HomeFeedViewModel = hiltViewModel(),
 ) {
-    val user = communityUsers.find { it.id == userId } ?: communityUsers.first()
-    val posts = communityPosts.filter { it.authorId == user.id }
-    val isFollowing = followedUserIds.contains(user.id)
+    val posts by feedViewModel.posts.collectAsStateWithLifecycle()
+    val userPostId = remember(posts, userId) {
+        posts.firstOrNull { it.userId.toString() == userId }?.id?.toString()
+    }
 
-    GreenGlassBackground(modifier = modifier) {
+    Surface(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp)
-                .padding(top = 12.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.Start,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Surface(onClick = onBackClick, shape = CircleShape, color = Color.Transparent) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        tint = PrimaryGreen,
-                        modifier = Modifier
-                            .padding(6.dp)
-                            .size(22.dp),
-                    )
-                }
-                Text(
-                    text = "用户主页",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = PrimaryGreen,
-                    fontWeight = FontWeight.ExtraBold,
-                )
-                Spacer(modifier = Modifier.width(28.dp))
-            }
-
-            GlassCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp)) {
-                Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(CircleShape)
-                                .background(BrightGreen.copy(alpha = 0.45f)),
-                        ) {
-                            RemoteImage(
-                                url = user.avatarUrl,
-                                contentDescription = user.name,
-                                modifier = Modifier.fillMaxSize(),
-                                fallbackColor = BrightGreen.copy(alpha = 0.45f),
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(user.name, style = MaterialTheme.typography.titleLarge, color = Ink, fontWeight = FontWeight.ExtraBold)
-                            Text(user.bio, style = MaterialTheme.typography.bodySmall, color = MutedInk, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        ProfileStat("帖子", posts.size.toString(), Modifier.weight(1f))
-                        ProfileStat("关注者", user.followers, Modifier.weight(1f))
-                        ProfileStat("控糖天数", user.days, Modifier.weight(1f))
-                    }
-                    FollowButton(
-                        followed = isFollowing,
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = { onFollowClick(user.id) },
-                    )
-                }
-            }
-
-            Text(
-                text = "${user.name} 的帖子",
-                style = MaterialTheme.typography.titleMedium,
-                color = Ink,
-                fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier.padding(start = 4.dp),
-            )
-            posts.forEach { post ->
-                UserPostListItem(post = post, onClick = { onPostClick(post.id) })
+            Text("用户主页", style = MaterialTheme.typography.headlineSmall)
+            Text("User ID: $userId")
+            Text("Followed users: ${followedUserIds.size}")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onBackClick) { Text("返回") }
+                Button(onClick = { onFollowClick(userId) }) { Text("关注") }
+                Button(
+                    onClick = { userPostId?.let(onPostClick) },
+                    enabled = userPostId != null,
+                ) { Text("打开帖子") }
             }
         }
     }
 }
 
-@Composable
-private fun UserPostListItem(
-    post: CommunityPost,
-    onClick: () -> Unit,
-) {
-    GlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        containerColor = Color.White.copy(alpha = 0.70f),
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            PostVisual(
-                imageUrl = post.imageUrl,
-                color = post.color,
-                height = 84,
-                title = post.mealName,
-                modifier = Modifier.size(width = 92.dp, height = 84.dp),
-            )
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(post.title, style = MaterialTheme.typography.titleSmall, color = Ink, fontWeight = FontWeight.ExtraBold)
-                StatusChip(post.glucoseTag, PrimaryGreen)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SocialMetric(Icons.Filled.Favorite, post.likes)
-                    SocialMetric(Icons.Filled.ChatBubble, post.comments)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProfileStat(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        color = Color(0xFFEAF8EF),
-    ) {
-        Column(
-            modifier = Modifier.padding(vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(value, style = MaterialTheme.typography.titleMedium, color = PrimaryGreen, fontWeight = FontWeight.ExtraBold)
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MutedInk, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun FollowButton(
-    followed: Boolean,
-    modifier: Modifier = Modifier,
-    compact: Boolean = false,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(50),
-        color = if (followed) Color(0xFFEAF8EF) else PrimaryGreen,
-    ) {
-        Text(
-            text = if (followed) "已关注" else "关注",
-            modifier = Modifier.padding(
-                horizontal = if (compact) 12.dp else 18.dp,
-                vertical = if (compact) 6.dp else 10.dp,
-            ),
-            style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelLarge,
-            color = if (followed) PrimaryGreen else Color.White,
-            textAlign = TextAlign.Center,
-            fontWeight = FontWeight.ExtraBold,
-        )
-    }
-}
-
-@Composable
-private fun RemoteImage(
-    url: String,
-    contentDescription: String?,
-    modifier: Modifier = Modifier,
-    fallbackColor: Color = TrackGray,
-) {
-    var image by androidx.compose.runtime.remember(url) { mutableStateOf<ImageBitmap?>(null) }
-
-    LaunchedEffect(url) {
-        image = withContext(Dispatchers.IO) {
-            runCatching {
-                URL(url).openStream().use { stream ->
-                    BitmapFactory.decodeStream(stream)?.asImageBitmap()
-                }
-            }.getOrNull()
-        }
-    }
-
-    val loadedImage = image
-    if (loadedImage != null) {
-        Image(
-            bitmap = loadedImage,
-            contentDescription = contentDescription,
-            modifier = modifier,
-            contentScale = ContentScale.Crop,
-        )
-    } else {
-        Box(modifier = modifier.background(fallbackColor), contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = Icons.Filled.LocalDining,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.72f),
-                modifier = Modifier.size(32.dp),
+private fun buildSearchHistoryRecords(posts: List<CommunityPost>): List<SearchHistoryRecord> {
+    val fromPosts = posts
+        .asReversed()
+        .take(10)
+        .map {
+            SearchHistoryRecord(
+                query = it.title,
+                summary = it.content,
+                timeLabel = "最近浏览",
             )
         }
-    }
+    return if (fromPosts.isNotEmpty()) fromPosts else DEFAULT_SEARCH_HISTORY_RECORDS
 }
 
-@Composable
-private fun MealAnalysisCard() {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 22.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = "最近餐食糖负荷",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = Ink,
-                    fontWeight = FontWeight.Bold,
-                )
-                Surface(
-                    color = Color(0xFFD9FFE6).copy(alpha = 0.82f),
-                    shape = RoundedCornerShape(50),
-                ) {
-                    Text(
-                        text = "已生成分析",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF066230),
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-            CarbGauge(
-                grams = 45,
-                goalGrams = 60,
-                progress = 45f / 60f,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(142.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun CarbGauge(
-    grams: Int,
-    goalGrams: Int,
-    progress: Float,
-    modifier: Modifier = Modifier,
-) {
-    Layout(
-        modifier = modifier,
-        content = {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val strokeWidth = 18.dp.toPx()
-                val horizontalInset = 26.dp.toPx()
-                val arcWidth = (size.width - horizontalInset * 2).coerceAtLeast(0f)
-                val arcHeight = arcWidth / 2f
-                val top = (size.height - arcHeight - strokeWidth / 2f).coerceAtLeast(0f)
-                val topLeft = Offset(horizontalInset, top)
-                val arcSize = Size(arcWidth, arcWidth)
-
-                drawArc(
-                    color = TrackGray,
-                    startAngle = 180f,
-                    sweepAngle = 180f,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
-                )
-                drawArc(
-                    color = PrimaryGreen,
-                    startAngle = 180f,
-                    sweepAngle = 180f * progress.coerceIn(0f, 1f),
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
-                )
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = grams.toString(),
-                        style = MaterialTheme.typography.displaySmall,
-                        color = PrimaryGreen,
-                        fontWeight = FontWeight.ExtraBold,
-                    )
-                    Text(
-                        text = "g",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = PrimaryGreen,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.padding(bottom = 5.dp),
-                    )
-                }
-                Text(
-                    text = "建议上限 ${goalGrams}g · 仍可摄入 ${(goalGrams - grams).coerceAtLeast(0)}g",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MutedInk,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        },
-    ) { measurables, constraints ->
-        val canvas = measurables[0].measure(constraints)
-        val label = measurables[1].measure(constraints.copy(minWidth = 0, minHeight = 0))
-        val width = constraints.maxWidth
-        val height = constraints.maxHeight
-        val labelX = (width - label.width) / 2
-        val labelY = (height * 0.48f).toInt().coerceAtMost(height - label.height)
-
-        layout(width, height) {
-            canvas.place(0, 0)
-            label.place(labelX, labelY)
-        }
-    }
-}
-
-@Composable
-private fun AiSuggestionCard(onClick: () -> Unit) {
-    GlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.LocalDining,
-                    contentDescription = null,
-                    tint = PrimaryGreen,
-                    modifier = Modifier.size(22.dp),
-                )
-                Text(
-                    text = "运动与药量建议",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = PrimaryGreen,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            SuggestionLine("根据午餐识别结果，建议餐后步行 30 分钟。")
-            SuggestionLine("估算可吸收糖分 45g，药量建议请结合医嘱确认。")
-        }
-    }
-}
-
-@Composable
-private fun SuggestionLine(text: String) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Box(
-            modifier = Modifier
-                .padding(top = 7.dp)
-                .size(5.dp)
-                .background(PrimaryGreen, CircleShape),
-        )
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF36463D),
-            fontWeight = FontWeight.SemiBold,
-            lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
-        )
-    }
-}
-
-@Composable
-private fun ScanMealButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = 18.dp,
-                shape = RoundedCornerShape(28.dp),
-                ambientColor = PrimaryGreen.copy(alpha = 0.20f),
-                spotColor = PrimaryGreen.copy(alpha = 0.20f),
-            ),
-        shape = RoundedCornerShape(28.dp),
-        color = PrimaryGreen,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 22.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(
-                    text = "拍照分析本餐",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.ExtraBold,
-                )
-                Text(
-                    text = "智能识别分析",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.76f),
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(Color.White.copy(alpha = 0.18f), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.CameraAlt,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(23.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TodayRecordsCard(onClick: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = "今日分析",
-            style = MaterialTheme.typography.titleSmall,
-            color = Ink,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.padding(start = 4.dp),
-        )
-        GlassCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick),
-            shape = RoundedCornerShape(20.dp),
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
-                RecordRow(
-                    completed = true,
-                    title = "早餐",
-                    description = "燕麦牛奶 · 建议步行 15 分钟",
-                    time = "08:30",
-                )
-                RecordRow(
-                    completed = true,
-                    title = "午餐",
-                    description = "米饭鸡胸肉 · 估算糖负荷 45g",
-                    time = "12:45",
-                )
-                RecordRow(
-                    completed = false,
-                    title = "晚餐",
-                    description = "待拍照分析",
-                    time = "--:--",
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun RecordRow(
-    completed: Boolean,
-    title: String,
-    description: String,
-    time: String,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(22.dp)
-                .background(if (completed) BrightGreen else TrackGray, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = if (completed) Icons.Filled.Check else Icons.Filled.Circle,
-                contentDescription = null,
-                tint = if (completed) PrimaryGreen else TrackGray,
-                modifier = Modifier.size(if (completed) 14.dp else 8.dp),
-            )
-        }
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge,
-                color = Ink,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (completed) Color(0xFF405149) else MutedInk,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-        Text(
-            text = time,
-            style = MaterialTheme.typography.labelSmall,
-            color = MutedInk,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.End,
-        )
-    }
-}
-
-private data class CommunityPost(
-    val id: String,
-    val authorId: String,
-    val author: String,
-    val time: String,
-    val title: String,
-    val body: String,
-    val mealName: String,
-    val imageUrl: String,
-    val glucoseTag: String,
-    val postType: String,
-    val likes: String,
-    val comments: String,
-    val saves: String,
-    val imageHeight: Int,
-    val color: Color,
-)
-
-private data class CommunityUser(
-    val id: String,
-    val name: String,
-    val bio: String,
-    val avatarUrl: String,
-    val followers: String,
-    val days: String,
-)
-
-private val communityUsers = listOf(
-    CommunityUser(
-        id = "user-zhang",
-        name = "张晓明",
-        bio = "记录中式正餐控糖经验，偏爱餐后步行。",
-        avatarUrl = "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=240&q=80",
-        followers = "1.2k",
-        days = "186",
-    ),
-    CommunityUser(
-        id = "user-lin",
-        name = "林医生的餐盘",
-        bio = "分享低 GI 搭配和温和控糖知识。",
-        avatarUrl = "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=240&q=80",
-        followers = "8.4k",
-        days = "420",
-    ),
-    CommunityUser(
-        id = "user-zhou",
-        name = "糖友小周",
-        bio = "外食控糖实践派，正在减少精制主食。",
-        avatarUrl = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=240&q=80",
-        followers = "726",
-        days = "92",
-    ),
-    CommunityUser(
-        id = "user-light",
-        name = "轻食记录者",
-        bio = "关注外卖、沙拉和轻食里的隐藏糖。",
-        avatarUrl = "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=240&q=80",
-        followers = "542",
-        days = "138",
-    ),
-)
-
-private val communityPosts = listOf(
-    CommunityPost(
-        id = "post-1",
-        authorId = "user-zhang",
-        author = "张晓明",
-        time = "今天 12:45",
-        title = "半份糙米饭 + 鸡胸肉，餐后曲线更平稳",
-        body = "午餐把白米饭换成半份糙米饭，搭配烤鸡胸肉和西兰花。系统估算可吸收糖约 45g，餐后步行 30 分钟，整体感觉比较轻松。",
-        mealName = "糙米鸡胸餐",
-        imageUrl = "https://source.unsplash.com/900x700/?brown-rice,chicken,broccoli,bowl",
-        glucoseTag = "餐后较平稳",
-        postType = "档案分享",
-        likes = "128",
-        comments = "24",
-        saves = "36",
-        imageHeight = 168,
-        color = Color(0xFF2F6F4E),
-    ),
-    CommunityPost(
-        id = "post-2",
-        authorId = "user-lin",
-        author = "林医生的餐盘",
-        time = "今天 09:18",
-        title = "早餐燕麦怎么搭配更耐饿",
-        body = "燕麦 40g 加无糖酸奶和一小把坚果，比单独喝粥更有饱腹感。注意水果不要一次放太多，可以先从半份开始观察。",
-        mealName = "燕麦酸奶碗",
-        imageUrl = "https://source.unsplash.com/900x900/?oatmeal,yogurt,nuts,bowl",
-        glucoseTag = "低 GI",
-        postType = "自由图文",
-        likes = "96",
-        comments = "18",
-        saves = "41",
-        imageHeight = 212,
-        color = Color(0xFF5D7F44),
-    ),
-    CommunityPost(
-        id = "post-3",
-        authorId = "user-zhou",
-        author = "糖友小周",
-        time = "昨天 18:32",
-        title = "红烧菜少汁会舒服很多",
-        body = "今天红烧肉只吃瘦肉部分，酱汁没有拌饭。系统提醒糖负荷中等，晚饭主食减少到半碗，餐后没有明显犯困。",
-        mealName = "少汁红烧肉",
-        imageUrl = "https://source.unsplash.com/900x900/?braised-pork,chinese-food,rice",
-        glucoseTag = "需复核药量",
-        postType = "档案分享",
-        likes = "84",
-        comments = "12",
-        saves = "19",
-        imageHeight = 228,
-        color = Color(0xFF8A5943),
-    ),
-    CommunityPost(
-        id = "post-4",
-        authorId = "user-light",
-        author = "轻食记录者",
-        time = "昨天 13:06",
-        title = "外卖沙拉也要留意隐藏糖",
-        body = "酱汁单独放，玉米和南瓜都减半，蛋白质选鸡蛋和虾仁。整体糖负荷低一些，但饱腹感还不错。",
-        mealName = "虾仁鸡蛋沙拉",
-        imageUrl = "https://source.unsplash.com/900x700/?shrimp,egg,salad,bowl",
-        glucoseTag = "清淡搭配",
-        postType = "自由图文",
-        likes = "67",
-        comments = "9",
-        saves = "22",
-        imageHeight = 178,
-        color = Color(0xFF3F8A6A),
-    ),
+private val DEFAULT_SEARCH_HISTORY_RECORDS = listOf(
+    SearchHistoryRecord("低GI早餐", "燕麦、鸡蛋、无糖酸奶搭配方案", "今天 08:12"),
+    SearchHistoryRecord("控糖晚餐", "清蒸鱼+杂粮饭+凉拌蔬菜", "昨天 19:43"),
+    SearchHistoryRecord("高蛋白加餐", "原味坚果与无糖豆浆", "昨天 16:20"),
+    SearchHistoryRecord("胰岛素注射时间", "餐前注射与峰值对齐建议", "周一 12:05"),
+    SearchHistoryRecord("外卖怎么选", "优先蒸煮、避免糖醋和油炸", "周一 09:36"),
 )
 
 @Preview(showBackground = true)
 @Composable
 private fun HomeScreenPreview() {
-    DiabetesAssistantTheme {
-        HomeScreen()
+    HomeScreen(welcomeTrigger = 1, guardianDays = 7)
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SearchHistoryEmptyPreview() {
+    SearchHistorySection(
+        records = emptyList(),
+        searchText = "",
+        activeQuery = "",
+        searchResultCount = 0,
+        onRecordClick = {},
+        onDeleteRecord = {},
+        onClearAll = {},
+    )
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SearchHistoryWithDataPreview() {
+    SearchHistorySection(
+        records = DEFAULT_SEARCH_HISTORY_RECORDS,
+        searchText = "",
+        activeQuery = "低GI早餐",
+        searchResultCount = 12,
+        onRecordClick = {},
+        onDeleteRecord = {},
+        onClearAll = {},
+    )
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun CreatePostScreenPreview() {
+    Surface {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("CreatePostScreen Preview")
+        }
     }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun CommunityPostDetailScreenPreview() {
+    Surface {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("CommunityPostDetailScreen Preview")
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun CommunityUserProfileScreenPreview() {
+    CommunityUserProfileScreen(onBackClick = {}, userId = "1")
 }

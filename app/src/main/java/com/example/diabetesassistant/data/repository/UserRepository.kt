@@ -23,6 +23,11 @@ interface UserRepository {
     suspend fun login(account: String, password: String): User?
 
     /**
+     * 检查账号是否已存在。
+     */
+    suspend fun isAccountExists(account: String): Boolean
+
+    /**
      * 读取用户信息。
      */
     suspend fun getUserById(userId: Long): User?
@@ -65,6 +70,11 @@ class UserRepositoryImpl @Inject constructor(
      * @see UserRepository.login
      */
     override suspend fun login(account: String, password: String): User? = userDao.login(account, password)
+
+    /**
+     * @see UserRepository.isAccountExists
+     */
+    override suspend fun isAccountExists(account: String): Boolean = userDao.isAccountExists(account)
 
     /**
      * @see UserRepository.getUserById

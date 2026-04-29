@@ -39,6 +39,12 @@ interface CommunityPostDao {
     suspend fun getById(id: Long): CommunityPost?
 
     /**
+     * 观察帖子详情。
+     */
+    @Query("SELECT * FROM community_posts WHERE id = :id LIMIT 1")
+    fun observeById(id: Long): Flow<CommunityPost?>
+
+    /**
      * 观察帖子流。
      */
     @Query("SELECT * FROM community_posts ORDER BY created_at DESC")

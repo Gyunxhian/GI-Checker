@@ -35,6 +35,11 @@ interface CommunityRepository {
     suspend fun getPostById(id: Long): CommunityPost?
 
     /**
+     * 观察帖子详情。
+     */
+    fun observePostById(id: Long): Flow<CommunityPost?>
+
+    /**
      * 观察帖子流。
      */
     fun observePosts(): Flow<List<CommunityPost>>
@@ -102,6 +107,11 @@ class CommunityRepositoryImpl @Inject constructor(
      * @see CommunityRepository.getPostById
      */
     override suspend fun getPostById(id: Long): CommunityPost? = communityPostDao.getById(id)
+
+    /**
+     * @see CommunityRepository.observePostById
+     */
+    override fun observePostById(id: Long): Flow<CommunityPost?> = communityPostDao.observeById(id)
 
     /**
      * @see CommunityRepository.observePosts

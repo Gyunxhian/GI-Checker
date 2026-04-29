@@ -1,55 +1,43 @@
 package com.example.diabetesassistant.ui.screens
 
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.diabetesassistant.Qwen3VL
 
-// 🔥 这是最终无参数版，能直接显示
+/** Manual test entry for Qwen flow placeholder. */
 @Composable
 fun testQwen() {
-    val context = LocalContext.current
-    val activity = context as ComponentActivity
-
-    val qwenVL = remember { Qwen3VL(activity) }
-
-    var aiResult by remember { mutableStateOf("点击按钮拍照分析") }
-    var isLoading by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Button(
-            onClick = {
-                isLoading = true
-                qwenVL.startAnalyzePhoto { result ->
-                    isLoading = false
-                    aiResult = result ?: "分析失败"
-                }
-            },
-            enabled = !isLoading
+    val result = remember { mutableStateOf("Ready") }
+    Surface(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(if (isLoading) "AI分析中..." else "📷 拍照并分析")
+            Text("Qwen Test", style = MaterialTheme.typography.headlineSmall)
+            Button(onClick = { result.value = "Not configured in reset state" }, modifier = Modifier.fillMaxWidth()) {
+                Text("Run")
+            }
+            Text(result.value)
         }
-
-        Text(
-            text = aiResult,
-            modifier = Modifier.padding(top = 20.dp)
-        )
     }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun TestQwenPreview() {
+    testQwen()
 }

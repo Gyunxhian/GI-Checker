@@ -91,7 +91,7 @@ private fun copyPickedImageToCache(context: android.content.Context, source: Uri
 fun CameraCaptureScreen(
     viewModel: CameraRecognitionViewModel,
     onExitCamera: () -> Unit,
-    onNavigateToLoading: () -> Unit,
+    onNavigateToPreview: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -133,7 +133,7 @@ fun CameraCaptureScreen(
         try {
             val stableUri = copyPickedImageToCache(context, uri)
             viewModel.setPendingCaptureUri(stableUri.toString())
-            onNavigateToLoading()
+            onNavigateToPreview()
         } catch (_: Exception) {
             Toast.makeText(context, R.string.camera_pick_failed, Toast.LENGTH_SHORT).show()
         }
@@ -161,7 +161,7 @@ fun CameraCaptureScreen(
                         file,
                     )
                     viewModel.setPendingCaptureUri(uri.toString())
-                    mainEx.execute { onNavigateToLoading() }
+                    mainEx.execute { onNavigateToPreview() }
                 }
 
                 override fun onError(exception: ImageCaptureException) {
@@ -224,6 +224,16 @@ fun CameraCaptureScreen(
                         .background(Color.White.copy(alpha = 0.50f)),
                 )
             CameraTopBar(onBackClick = onExitCamera)
+
+                Text(
+                    text = "请将硬币放入画面作尺寸参照",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = CameraDarkGreen,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 74.dp),
+                )
+
                 ScannerFrame(
                     modifier = Modifier
                         .align(Alignment.Center)

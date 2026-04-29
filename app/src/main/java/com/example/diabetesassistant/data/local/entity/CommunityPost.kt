@@ -34,6 +34,10 @@ data class CommunityPost(
     val imagePath: String?,
     @ColumnInfo(name = "blood_sugar_tag")
     val bloodSugarTag: String?,
+    @ColumnInfo(name = "post_type", defaultValue = "'FREE_TEXT'")
+    val postType: String,
+    @ColumnInfo(name = "archive_record_id")
+    val archiveRecordId: Long?,
     @ColumnInfo(name = "like_count")
     val likeCount: Int = 0,
     @ColumnInfo(name = "comment_count")

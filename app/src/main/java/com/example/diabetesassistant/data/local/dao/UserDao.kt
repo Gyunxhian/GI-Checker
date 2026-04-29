@@ -37,11 +37,17 @@ interface UserDao {
     @Query(
         """
         SELECT * FROM users
-        WHERE (phone = :account OR email = :account) AND password = :password
+        WHERE (phone = :account OR LOWER(email) = LOWER(:account)) AND password = :password
         LIMIT 1
         """,
     )
     suspend fun login(account: String, password: String): User?
+
+    /**
+     * 检查手机号或邮箱是否已存在。
+     */
+    @Query("SELECT EXISTS(SELECT 1 FROM users WHERE phone = :account OR LOWER(email) = LOWER(:account) LIMIT 1)")
+    suspend fun isAccountExists(account: String): Boolean
 
     /**
      * 观察所有用户。

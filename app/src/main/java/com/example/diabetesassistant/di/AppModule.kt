@@ -66,11 +66,17 @@ object AppModule {
             context,
             DiabetesDatabase::class.java,
             DiabetesDatabase.DATABASE_NAME,
-        ).addCallback(
+        ).addMigrations(
+            DiabetesDatabase.MIGRATION_1_2,
+            DiabetesDatabase.MIGRATION_2_3,
+        ).fallbackToDestructiveMigration(true)
+            .fallbackToDestructiveMigrationOnDowngrade(true)
+            .addCallback(
             object : RoomDatabase.Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     super.onCreate(db)
                     DiabetesDatabase.prepopulateCookingMethods(db)
+                    DiabetesDatabase.prepopulateDefaultUsersAndPosts(db)
                 }
             },
         ).build()

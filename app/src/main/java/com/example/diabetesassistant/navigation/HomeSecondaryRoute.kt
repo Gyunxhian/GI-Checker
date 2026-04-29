@@ -9,6 +9,7 @@ object HomeSecondaryRoute {
     const val PostDetail = "$PostDetailBase/{$PostIdArg}"
     const val UserProfileBase = "home/user"
     const val UserProfile = "$UserProfileBase/{$UserIdArg}"
+    const val CreatePost = "home/create-post"
     const val RecipeSuggestion = "home/recipe-suggestion"
     const val ExercisePlan = "home/exercise-plan"
     const val MedicationReview = "home/medication-review"
