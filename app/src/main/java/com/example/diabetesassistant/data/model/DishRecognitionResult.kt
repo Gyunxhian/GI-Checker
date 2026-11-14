@@ -36,4 +36,6 @@ data class Ingredient(
     val cookingMethod: String,
     @SerializedName("gi_value")
     val giValue: Float,
+    @SerializedName("name_en")
+    val nameEn: String? = null,
 )

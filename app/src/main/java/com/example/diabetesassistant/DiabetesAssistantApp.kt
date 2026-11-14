@@ -1,5 +1,13 @@
 package com.example.diabetesassistant
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -7,6 +15,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
@@ -40,6 +50,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -64,19 +75,8 @@ fun DiabetesAssistantApp(
     val onboardingSubmissionState by appStateViewModel.onboardingSubmissionState.collectAsStateWithLifecycle()
     val guardianDays by appStateViewModel.guardianDays.collectAsStateWithLifecycle()
 
-    if (!signedIn || signedInUserId == null) {
-        AuthOnboardingScreen(
-            mode = AuthOnboardingMode.AuthOnly,
-            authState = authState,
-            onboardingSubmissionState = onboardingSubmissionState,
-            onAuthModeChange = appStateViewModel::setRegisterMode,
-            onNicknameChange = appStateViewModel::updateNickname,
-            onAccountChange = appStateViewModel::updateAccount,
-            onPasswordChange = appStateViewModel::updatePassword,
-            onAuthSubmit = appStateViewModel::submitAuth,
-            onCompleteOnboarding = appStateViewModel::completeOnboarding,
-        )
-        return
+    LaunchedEffect(Unit) {
+        appStateViewModel.ensureSingleUserSignedIn()
     }
 
     if (!onboardingCompleted) {
@@ -98,19 +98,12 @@ fun DiabetesAssistantApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val currentDestination = MainDestination.fromRoute(currentRoute)
-    val showBottomBar = MainDestination.items.any { it.route == currentRoute }
-    var homeEnterToken by rememberSaveable { mutableIntStateOf(0) }
-    var hasShownHomeWelcomeInProcess by remember { mutableStateOf(false) }
-
-    LaunchedEffect(currentRoute) {
-        if (currentRoute == MainDestination.Home.route && !hasShownHomeWelcomeInProcess) {
-            homeEnterToken += 1
-            hasShownHomeWelcomeInProcess = true
-        }
-    }
+    // 仅在三个顶级主 Tab 页面展示底部导航栏；进入二级子流程（如拍照测算、记录详情）时自动隐藏
+    val mainTabRoutes = listOf(MainDestination.Home.route, MainDestination.Archive.route, MainDestination.Life.route)
+    val showBottomBar = mainTabRoutes.contains(currentRoute)
 
     Scaffold(
-        containerColor = Color(0xFFF3F7F4),
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             if (showBottomBar) {
                 SplitBottomNavigationBar(
@@ -123,10 +116,7 @@ fun DiabetesAssistantApp(
         AppNavHost(
             navController = navController,
             modifier = Modifier.padding(innerPadding),
-            onSignOut = appStateViewModel::signOut,
-            homeEnterToken = homeEnterToken,
             guardianDays = guardianDays,
-            signedInUserId = signedInUserId,
         )
     }
 }
@@ -143,68 +133,113 @@ private fun SplitBottomNavigationBar(
     )
 
     fun navigate(destination: MainDestination) {
+        if (currentDestination == destination) return
         navController.navigate(destination.route) {
             popUpTo(navController.graph.findStartDestination().id) {
-                saveState = true
+                saveState = destination != MainDestination.Home
             }
             launchSingleTop = true
-            restoreState = true
+            restoreState = destination != MainDestination.Home
         }
     }
+
+    val isCameraVisible = currentDestination != MainDestination.Home
+
+    // 弹性弹簧动画规范：中等弹性阻尼，生动自然不生硬
+    val springSpecFloat = spring<Float>(
+        dampingRatio = Spring.DampingRatioMediumBouncy,
+        stiffness = Spring.StiffnessMediumLow,
+    )
+    val springSpecDp = spring<androidx.compose.ui.unit.Dp>(
+        dampingRatio = Spring.DampingRatioMediumBouncy,
+        stiffness = Spring.StiffnessMediumLow,
+    )
+
+    val cameraWeight by animateFloatAsState(
+        targetValue = if (isCameraVisible) 1.15f else 0.0001f,
+        animationSpec = springSpecFloat,
+        label = "cameraWeight",
+    )
+    val cameraScale by animateFloatAsState(
+        targetValue = if (isCameraVisible) 1f else 0.001f,
+        animationSpec = springSpecFloat,
+        label = "cameraScale",
+    )
+    val cameraAlpha by animateFloatAsState(
+        targetValue = if (isCameraVisible) 1f else 0f,
+        animationSpec = tween(durationMillis = 200),
+        label = "cameraAlpha",
+    )
+    val spacerWidth by animateDpAsState(
+        targetValue = if (isCameraVisible) 12.dp else 0.dp,
+        animationSpec = springSpecDp,
+        label = "navSpacerWidth",
+    )
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(80.dp)
             .background(Color.Transparent)
             .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars)
-            .padding(horizontal = 18.dp)
-            .padding(top = 10.dp, bottom = 14.dp),
+            .padding(horizontal = 16.dp)
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // 主导航胶囊：在首页占满整个导航空间；离开首页时，被弹性展开的相机键挤压压缩空间
         Row(
             modifier = Modifier
                 .weight(3f)
                 .height(68.dp)
                 .shadow(
-                    elevation = 18.dp,
+                    elevation = 12.dp,
                     shape = RoundedCornerShape(28.dp),
-                    ambientColor = Color(0xFF0B6F36).copy(alpha = 0.12f),
-                    spotColor = Color(0xFF0B6F36).copy(alpha = 0.12f),
+                    ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                 )
                 .clip(RoundedCornerShape(28.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.82f),
-                            Color.White.copy(alpha = 0.50f),
-                            Color(0xFFA8D4B9).copy(alpha = 0.28f),
-                        ),
-                        start = Offset.Zero,
-                        end = Offset(520f, 160f),
-                    )
-                )
-                .border(1.dp, Color.White.copy(alpha = 0.86f), RoundedCornerShape(28.dp))
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(28.dp))
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             regularDestinations.forEach { destination ->
+                val isSelected = currentDestination == destination
+                val itemWeight by animateFloatAsState(
+                    targetValue = if (isSelected) 1.45f else 1.0f,
+                    animationSpec = springSpecFloat,
+                    label = "itemWeight_${destination.route}",
+                )
+
                 BottomNavPillItem(
                     destination = destination,
-                    selected = currentDestination == destination,
+                    selected = isSelected,
                     onClick = { navigate(destination) },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(itemWeight),
                 )
             }
         }
 
-        Spacer(modifier = Modifier.width(14.dp))
+        if (isCameraVisible || cameraWeight > 0.01f) {
+            Spacer(modifier = Modifier.width(spacerWidth))
 
-        CameraNavButton(
-            selected = currentDestination == MainDestination.Camera,
-            onClick = { navigate(MainDestination.Camera) },
-            modifier = Modifier.weight(1f),
-        )
+            Box(
+                modifier = Modifier
+                    .weight(cameraWeight)
+                    .graphicsLayer {
+                        scaleX = cameraScale
+                        scaleY = cameraScale
+                        alpha = cameraAlpha
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                CameraNavButton(
+                    selected = currentDestination == MainDestination.Camera,
+                    onClick = { navigate(MainDestination.Camera) },
+                )
+            }
+        }
     }
 }
 
@@ -215,27 +250,44 @@ private fun BottomNavPillItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val contentColor = if (selected) Color(0xFF007A35) else Color(0xFF7D8781)
+    val selectedBg = MaterialTheme.colorScheme.primaryContainer
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(220),
+        label = "pillContentColor",
+    )
+    val pillBgColor by animateColorAsState(
+        targetValue = if (selected) selectedBg else Color.Transparent,
+        animationSpec = tween(220),
+        label = "pillBgColor",
+    )
+
     Surface(
         onClick = onClick,
-        modifier = modifier.height(52.dp),
+        modifier = modifier.fillMaxHeight(),
         shape = RoundedCornerShape(22.dp),
-        color = if (selected) Color.White.copy(alpha = 0.50f) else Color.Transparent,
+        color = pillBgColor,
         contentColor = contentColor,
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 7.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 4.dp, horizontal = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
             Icon(
                 imageVector = destination.icon,
                 contentDescription = stringResource(destination.titleRes),
-                modifier = Modifier.size(21.dp),
+                modifier = Modifier.size(22.dp),
             )
+            Spacer(Modifier.height(2.dp))
             Text(
                 text = stringResource(destination.titleRes),
-                style = MaterialTheme.typography.labelSmall,
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                maxLines = 1,
+                softWrap = false,
                 fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Bold,
             )
         }
@@ -248,55 +300,32 @@ private fun CameraNavButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val buttonColor = if (selected) Color(0xFF0B6F36) else Color(0xFF43FF82)
-    val iconColor = if (selected) Color.White else Color(0xFF073D20)
+    val buttonColor = MaterialTheme.colorScheme.primary
+    val iconColor = MaterialTheme.colorScheme.onPrimary
 
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .size(60.dp)
+            .shadow(
+                elevation = 12.dp,
+                shape = CircleShape,
+                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+            )
+            .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape),
+        shape = CircleShape,
+        color = buttonColor,
+        contentColor = iconColor,
     ) {
-        Surface(
-            onClick = onClick,
-            modifier = Modifier
-                .size(66.dp)
-                .shadow(
-                    elevation = 22.dp,
-                    shape = CircleShape,
-                    ambientColor = Color(0xFF0B6F36).copy(alpha = 0.32f),
-                    spotColor = Color(0xFF0B6F36).copy(alpha = 0.32f),
-                )
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.42f),
-                            Color.Transparent,
-                        ),
-                        start = Offset.Zero,
-                        end = Offset(80f, 80f),
-                    ),
-                    CircleShape,
-                )
-                .border(3.dp, Color.White.copy(alpha = 0.92f), CircleShape),
-            shape = CircleShape,
-            color = buttonColor,
-            contentColor = iconColor,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = MainDestination.Camera.icon,
-                    contentDescription = stringResource(MainDestination.Camera.titleRes),
-                    modifier = Modifier.size(30.dp),
-                )
-            }
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = MainDestination.Camera.icon,
+                contentDescription = "拍照测算",
+                tint = iconColor,
+                modifier = Modifier.size(28.dp),
+            )
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = stringResource(MainDestination.Camera.titleRes),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFF007A35),
-            fontWeight = FontWeight.ExtraBold,
-        )
     }
 }
 

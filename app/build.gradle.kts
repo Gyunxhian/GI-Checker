@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.android.application)
@@ -5,6 +7,20 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
+
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
+}
+
+val deepSeekApiKey: String = localProperties.getProperty("DEEPSEEK_API_KEY")
+    ?: System.getenv("DEEPSEEK_API_KEY")
+    ?: ""
+val usdaApiKey: String = localProperties.getProperty("USDA_API_KEY")
+    ?: System.getenv("USDA_API_KEY")
+    ?: ""
 
 android {
     namespace = "com.example.diabetesassistant"
@@ -19,8 +35,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "DASHSCOPE_API_KEY", "\"\"")
-        buildConfigField("String", "USDA_API_KEY", "\"\"")
+        buildConfigField("String", "DEEPSEEK_API_KEY", "\"$deepSeekApiKey\"")
+        buildConfigField("String", "USDA_API_KEY", "\"$usdaApiKey\"")
     }
 
     buildTypes {
@@ -39,6 +55,9 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 }
 kotlin {

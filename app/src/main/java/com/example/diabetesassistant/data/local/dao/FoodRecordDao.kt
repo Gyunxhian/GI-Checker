@@ -34,6 +34,12 @@ interface FoodRecordDao {
     suspend fun delete(record: FoodRecord): Int
 
     /**
+     * 清空全部档案记录。
+     */
+    @Query("DELETE FROM food_records")
+    suspend fun deleteAll(): Int
+
+    /**
      * 查询档案详情。
      */
     @Query("SELECT * FROM food_records WHERE id = :id LIMIT 1")

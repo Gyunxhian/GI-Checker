@@ -7,12 +7,14 @@ import com.example.diabetesassistant.BuildConfig
 import com.example.diabetesassistant.data.local.entity.User
 import com.example.diabetesassistant.data.local.preferences.UserPreferencesDataSource
 import com.example.diabetesassistant.data.repository.UserRepository
+import com.example.diabetesassistant.ui.theme.AppThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -67,6 +69,12 @@ class AppStateViewModel @Inject constructor(
         initialValue = null,
     )
 
+    val appThemeMode: StateFlow<AppThemeMode> = userPreferencesDataSource.appThemeModeFlow.stateIn(
+        scope = viewModelScope,
+        started = kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000),
+        initialValue = AppThemeMode.FOLLOW_SYSTEM,
+    )
+
     private val _sessionUserId = MutableStateFlow<Long?>(null)
 
     private val _guardianDays = MutableStateFlow(1)
@@ -81,13 +89,10 @@ class AppStateViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             signedInUserId.collect { userId ->
-                if (userId == null) {
-                    _guardianDays.value = 1
-                } else {
-                    val createdAt = userRepository.getUserById(userId)?.createdAt ?: System.currentTimeMillis()
-                    val days = ((System.currentTimeMillis() - createdAt) / DAY_MILLIS) + 1
-                    _guardianDays.value = days.coerceAtLeast(1L).toInt()
-                }
+                val id = userId ?: 1L
+                val createdAt = userRepository.getUserById(id)?.createdAt ?: System.currentTimeMillis()
+                val days = ((System.currentTimeMillis() - createdAt) / DAY_MILLIS) + 1
+                _guardianDays.value = days.coerceAtLeast(1L).toInt()
             }
         }
     }
@@ -262,6 +267,28 @@ class AppStateViewModel @Inject constructor(
         }
     }
 
+    fun ensureSingleUserSignedIn() {
+        viewModelScope.launch {
+            if (userRepository.getUserById(1L) == null) {
+                userRepository.register(
+                    User(
+                        id = 1L,
+                        nickname = "我",
+                        phone = null,
+                        email = "local@user.local",
+                        password = "local_password",
+                    )
+                )
+            }
+            _sessionUserId.value = 1L
+            userPreferencesDataSource.setSessionState(
+                signedIn = true,
+                userId = 1L,
+                onboardingCompleted = userPreferencesDataSource.onboardingCompletedFlow.first(),
+            )
+        }
+    }
+
     /**
      * 完成引导并写入必填健康档案。
      */
@@ -291,8 +318,21 @@ class AppStateViewModel @Inject constructor(
         _onboardingSubmissionState.value = OnboardingSubmissionState(isSubmitting = true, errorMessage = null)
         viewModelScope.launch {
             runCatching {
+                if (userRepository.getUserById(userId) == null) {
+                    userRepository.register(
+                        User(
+                            id = userId,
+                            nickname = "我",
+                            phone = null,
+                            email = "local@user.local",
+                            password = "local_password",
+                        )
+                    )
+                }
+                val existing = userRepository.getHealthProfile(userId)
                 userRepository.saveHealthProfile(
                     com.example.diabetesassistant.data.local.entity.HealthProfile(
+                        id = existing?.id ?: 0L,
                         userId = userId,
                         diabetesType = diabetes,
                         insulinType = insulin,
@@ -302,10 +342,16 @@ class AppStateViewModel @Inject constructor(
                         heightCm = heightCm,
                     )
                 )
-                userPreferencesDataSource.setOnboardingCompleted(true)
+                _sessionUserId.value = userId
+                userPreferencesDataSource.setSessionState(
+                    signedIn = true,
+                    userId = userId,
+                    onboardingCompleted = true,
+                )
             }.onSuccess {
                 _onboardingSubmissionState.value = OnboardingSubmissionState()
-            }.onFailure {
+            }.onFailure { e ->
+                android.util.Log.e("AppStateViewModel", "completeOnboarding failed", e)
                 _onboardingSubmissionState.value = OnboardingSubmissionState(
                     isSubmitting = false,
                     errorMessage = "健康档案保存失败，请重试",

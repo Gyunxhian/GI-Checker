@@ -27,6 +27,11 @@ interface FoodRecordRepository {
     suspend fun delete(record: FoodRecord)
 
     /**
+     * 清空所有档案。
+     */
+    suspend fun deleteAll()
+
+    /**
      * 查询档案详情。
      */
     suspend fun getById(id: Long): FoodRecord?
@@ -66,6 +71,10 @@ class FoodRecordRepositoryImpl @Inject constructor(
      */
     override suspend fun delete(record: FoodRecord) {
         foodRecordDao.delete(record)
+    }
+
+    override suspend fun deleteAll() {
+        foodRecordDao.deleteAll()
     }
 
     /**

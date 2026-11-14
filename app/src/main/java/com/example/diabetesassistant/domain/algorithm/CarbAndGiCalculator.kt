@@ -39,11 +39,23 @@ class CarbAndGiCalculator @Inject constructor() {
      * Step 2：按荤素分类汇总。
      */
     fun summarizeByCategory(details: List<IngredientCarbDetail>): MealCarbSummary {
-        val veg = details.filter { it.category == "素" }
-        val meat = details.filter { it.category == "荤" }
+        val veg = details.filter {
+            it.category.equals("vegetable", ignoreCase = true) ||
+            it.category.contains("素")
+        }
+        val meat = details.filter {
+            it.category.equals("meat", ignoreCase = true) ||
+            it.category.contains("荤")
+        }
+        val unknown = details.filter { d ->
+            !d.category.equals("vegetable", ignoreCase = true) &&
+            !d.category.contains("素") &&
+            !d.category.equals("meat", ignoreCase = true) &&
+            !d.category.contains("荤")
+        }
 
-        val vegWeight = veg.sumOf { it.weightG.toDouble() }.toFloat()
-        val vegCarbs = veg.sumOf { it.totalCarbsG.toDouble() }.toFloat()
+        val vegWeight = (veg.sumOf { it.weightG.toDouble() } + unknown.sumOf { it.weightG.toDouble() }).toFloat()
+        val vegCarbs = (veg.sumOf { it.totalCarbsG.toDouble() } + unknown.sumOf { it.totalCarbsG.toDouble() }).toFloat()
         val meatWeight = meat.sumOf { it.weightG.toDouble() }.toFloat()
         val meatCarbs = meat.sumOf { it.totalCarbsG.toDouble() }.toFloat()
 

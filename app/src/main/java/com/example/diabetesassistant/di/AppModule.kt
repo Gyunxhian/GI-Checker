@@ -9,21 +9,16 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.diabetesassistant.data.local.DiabetesDatabase
-import com.example.diabetesassistant.data.local.dao.CommentDao
-import com.example.diabetesassistant.data.local.dao.CommunityPostDao
 import com.example.diabetesassistant.data.local.dao.CookingMethodDao
-import com.example.diabetesassistant.data.local.dao.FavoriteDao
 import com.example.diabetesassistant.data.local.dao.FoodRecordDao
 import com.example.diabetesassistant.data.local.dao.HealthProfileDao
 import com.example.diabetesassistant.data.local.dao.UsdaCacheDao
 import com.example.diabetesassistant.data.local.dao.UserDao
-import com.example.diabetesassistant.data.remote.DashScopeApi
+import com.example.diabetesassistant.data.remote.DeepSeekApi
 import com.example.diabetesassistant.data.remote.UsdaApi
 import com.example.diabetesassistant.data.remote.interceptor.RetryInterceptor
 import com.example.diabetesassistant.data.repository.AiRepository
 import com.example.diabetesassistant.data.repository.AiRepositoryImpl
-import com.example.diabetesassistant.data.repository.CommunityRepository
-import com.example.diabetesassistant.data.repository.CommunityRepositoryImpl
 import com.example.diabetesassistant.data.repository.FoodRecordRepository
 import com.example.diabetesassistant.data.repository.FoodRecordRepositoryImpl
 import com.example.diabetesassistant.data.repository.NutritionRepository
@@ -45,6 +40,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Qualifier
 import javax.inject.Singleton
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -69,6 +65,7 @@ object AppModule {
         ).addMigrations(
             DiabetesDatabase.MIGRATION_1_2,
             DiabetesDatabase.MIGRATION_2_3,
+            DiabetesDatabase.MIGRATION_3_4,
         ).fallbackToDestructiveMigration(true)
             .fallbackToDestructiveMigrationOnDowngrade(true)
             .addCallback(
@@ -76,7 +73,6 @@ object AppModule {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     super.onCreate(db)
                     DiabetesDatabase.prepopulateCookingMethods(db)
-                    DiabetesDatabase.prepopulateDefaultUsersAndPosts(db)
                 }
             },
         ).build()
@@ -99,24 +95,6 @@ object AppModule {
      */
     @Provides
     fun provideFoodRecordDao(database: DiabetesDatabase): FoodRecordDao = database.foodRecordDao()
-
-    /**
-     * 提供帖子 DAO。
-     */
-    @Provides
-    fun provideCommunityPostDao(database: DiabetesDatabase): CommunityPostDao = database.communityPostDao()
-
-    /**
-     * 提供评论 DAO。
-     */
-    @Provides
-    fun provideCommentDao(database: DiabetesDatabase): CommentDao = database.commentDao()
-
-    /**
-     * 提供收藏 DAO。
-     */
-    @Provides
-    fun provideFavoriteDao(database: DiabetesDatabase): FavoriteDao = database.favoriteDao()
 
     /**
      * 提供烹饪方式 DAO。
@@ -142,19 +120,6 @@ object AppModule {
     }
 
     /**
-     * 提供 DashScope OkHttpClient。
-     */
-    @Provides
-    @Singleton
-    @DashScopeClient
-    fun provideDashScopeOkHttpClient(): OkHttpClient {
-        return OkHttpClient.Builder()
-            .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
-            .addInterceptor(RetryInterceptor())
-            .build()
-    }
-
-    /**
      * 提供 USDA OkHttpClient。
      */
     @Provides
@@ -162,22 +127,11 @@ object AppModule {
     @UsdaClient
     fun provideUsdaOkHttpClient(): OkHttpClient {
         return OkHttpClient.Builder()
-            .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
             .addInterceptor(RetryInterceptor())
-            .build()
-    }
-
-    /**
-     * 提供 DashScope Retrofit。
-     */
-    @Provides
-    @Singleton
-    @DashScopeRetrofit
-    fun provideDashScopeRetrofit(@DashScopeClient okHttpClient: OkHttpClient): Retrofit {
-        return Retrofit.Builder()
-            .baseUrl("https://dashscope.aliyuncs.com/")
-            .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
             .build()
     }
 
@@ -193,15 +147,6 @@ object AppModule {
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
-    }
-
-    /**
-     * 提供 DashScope API。
-     */
-    @Provides
-    @Singleton
-    fun provideDashScopeApi(@DashScopeRetrofit retrofit: Retrofit): DashScopeApi {
-        return retrofit.create(DashScopeApi::class.java)
     }
 
     /**
@@ -232,16 +177,35 @@ object AppModule {
         return FoodRecordRepositoryImpl(foodRecordDao)
     }
 
-    /**
-     * 提供社区仓库。
-     */
     @Provides
     @Singleton
-    fun provideCommunityRepository(
-        communityPostDao: CommunityPostDao,
-        commentDao: CommentDao,
-        favoriteDao: FavoriteDao,
-    ): CommunityRepository = CommunityRepositoryImpl(communityPostDao, commentDao, favoriteDao)
+    @DeepSeekClient
+    fun provideDeepSeekOkHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
+            .addInterceptor(RetryInterceptor())
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    @DeepSeekRetrofit
+    fun provideDeepSeekRetrofit(@DeepSeekClient okHttpClient: OkHttpClient): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("https://api.deepseek.com/v1/")
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideDeepSeekApi(@DeepSeekRetrofit retrofit: Retrofit): DeepSeekApi {
+        return retrofit.create(DeepSeekApi::class.java)
+    }
 
     /**
      * 提供 AI 仓库。
@@ -249,9 +213,10 @@ object AppModule {
     @Provides
     @Singleton
     fun provideAiRepository(
-        dashScopeApi: DashScopeApi,
+        deepSeekApi: DeepSeekApi,
         apiKeyProvider: com.example.diabetesassistant.data.remote.ApiKeyProvider,
-    ): AiRepository = AiRepositoryImpl(dashScopeApi, apiKeyProvider)
+        @ApplicationContext context: Context,
+    ): AiRepository = AiRepositoryImpl(deepSeekApi, apiKeyProvider, context)
 
     /**
      * 提供营养仓库。
@@ -356,13 +321,6 @@ object AppModule {
 }
 
 /**
- * DashScope OkHttp 依赖限定符。
- */
-@Qualifier
-@Retention(AnnotationRetention.BINARY)
-annotation class DashScopeClient
-
-/**
  * USDA OkHttp 依赖限定符。
  */
 @Qualifier
@@ -370,15 +328,18 @@ annotation class DashScopeClient
 annotation class UsdaClient
 
 /**
- * DashScope Retrofit 依赖限定符。
- */
-@Qualifier
-@Retention(AnnotationRetention.BINARY)
-annotation class DashScopeRetrofit
-
-/**
  * USDA Retrofit 依赖限定符。
  */
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class UsdaRetrofit
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class DeepSeekClient
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class DeepSeekRetrofit
+
+

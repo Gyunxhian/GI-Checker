@@ -9,10 +9,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class ApiKeyProvider @Inject constructor() {
-    /**
-     * DashScope Key。
-     */
-    fun dashScopeApiKey(): String = BuildConfig.DASHSCOPE_API_KEY
+    fun deepSeekApiKey(): String = BuildConfig.DEEPSEEK_API_KEY
 
     /**
      * USDA Key。

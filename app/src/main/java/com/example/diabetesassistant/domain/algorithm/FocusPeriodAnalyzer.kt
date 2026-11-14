@@ -43,7 +43,7 @@ class FocusPeriodAnalyzer @Inject constructor() {
         val lines = periods.joinToString("\n") {
             "- 餐后${it.timeLabel}血糖约${formatOneDecimal(it.bloodSugar)}mmol/L"
         }
-        return "根据以下血糖预测，为糖尿病患者生成温馨提醒。语气温和，每条≤30字，不是医疗建议:\n$lines"
+        return "根据以下血糖预测，为糖尿病患者生成温馨提醒。语气温和，每条≤30字，不是医疗建议:\n$lines\n请直接简要回答，无需长篇思考。"
     }
 
     private fun extractIntervals(

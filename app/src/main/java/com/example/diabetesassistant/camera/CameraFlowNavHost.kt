@@ -9,8 +9,8 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -40,14 +40,8 @@ fun CameraFlowNavHost(
         startDestination = CameraRoute.Capture,
         modifier = modifier.fillMaxSize(),
         enterTransition = {
-            fadeIn(
-                animationSpec = tween(
-                    durationMillis = 320,
-                    easing = LinearOutSlowInEasing,
-                ),
-            ) + slideInHorizontally(
-                animationSpec = tween(320, easing = LinearOutSlowInEasing),
-            ) { fullWidth -> fullWidth / 18 }
+            fadeIn(animationSpec = tween(320, easing = LinearOutSlowInEasing)) +
+                slideInHorizontally(animationSpec = tween(320, easing = LinearOutSlowInEasing)) { fullWidth -> fullWidth / 18 }
         },
         exitTransition = {
             fadeOut(animationSpec = tween(240)) +
@@ -66,23 +60,9 @@ fun CameraFlowNavHost(
             CameraCaptureScreen(
                 viewModel = viewModel,
                 onExitCamera = onExitCamera,
-                onNavigateToPreview = {
-                    nestedNavController.navigate(CameraRoute.Preview)
-                },
-            )
-        }
-        composable(CameraRoute.Preview) {
-            val pendingUriString by viewModel.pendingImageUri.collectAsState()
-            CapturePreviewScreen(
-                imageUriString = pendingUriString.orEmpty(),
-                onRetake = {
-                    viewModel.setPendingCaptureUri("")
-                    nestedNavController.popBackStack()
-                },
-                onConfirm = {
+                onNavigateToLoading = {
                     nestedNavController.navigate(CameraRoute.Loading)
                 },
-                onBack = { nestedNavController.popBackStack() },
             )
         }
         composable(CameraRoute.Loading) {
@@ -91,17 +71,21 @@ fun CameraFlowNavHost(
                 navController = nestedNavController,
             )
         }
-        composable(CameraRoute.Confirm) {
-            RecognitionConfirmScreen(
-                viewModel = viewModel,
-                navController = nestedNavController,
-            )
-        }
-        composable(CameraRoute.Insights) {
-            AiInsightsScreen(
-                viewModel = viewModel,
-                navController = nestedNavController,
-                onFinish = {
+        composable(CameraRoute.Detail) {
+            val state by viewModel.uiState.collectAsState()
+            ArchiveDetailScreen(
+                uiState = state,
+                onMeatRatioChange = { viewModel.updateMeatRatio(it) },
+                onIntakePercentChange = { viewModel.updateIntakePercent(it) },
+                onBloodSugarChange = { viewModel.updateBloodSugarStart(it) },
+                onInsulinTypeChange = { viewModel.updateInsulinType(it) },
+                onSave = {
+                    viewModel.saveOrUpdateRecord {
+                        viewModel.resetFlow()
+                        onExitCamera()
+                    }
+                },
+                onBack = {
                     viewModel.resetFlow()
                     onExitCamera()
                 },

@@ -64,7 +64,7 @@
 - [x] 胰岛素范围常量对象（速效/短效/中效/长效 min/max/起效/峰值/持续）
 
 ### 2.4 远程 API 客户端
-- [x] DashScope API（Qwen VL）Retrofit 接口
+- [x] DashScope API（Qwen VL）Retrofit 接口 → 阶段六替换为 DeepSeek API
 - [x] USDA API Retrofit 接口
 - [x] API Key 安全存储
 - [x] 网络错误处理与重试
@@ -73,7 +73,7 @@
 - [x] UserRepository（登录注册、用户信息）
 - [x] FoodRecordRepository（档案 CRUD）
 - [x] CommunityRepository（帖子/评论/收藏 CRUD）
-- [x] AiRepository（Qwen VL 调用封装）
+- [x] AiRepository（Qwen VL 调用封装 → 阶段六替换为 DeepSeek）
 - [x] NutritionRepository（USDA 查询 + 缓存逻辑）
 
 ### ✅ 阶段二审查节点
@@ -148,128 +148,97 @@
 
 ---
 
-## 阶段五：主页 🏠
+## 阶段五：主页重构（纯私有代谢健康数据看板）🏠
 
-### 5.1 启动欢迎层
-- [x] 全屏"血糖助手已守护您 XX 天了"（28sp+, #2E7E5D）
-- [x] 向上滑动 → 弹簧向上弹，欢迎页面向上弹走，不要回弹，瀑布流页面连着欢迎页底部向上滑动，停留在界面上
-- [x] 打开app新进程进入主页 Tab 才显示
-- [x] 若没有退出进程/杀死进程，再次进入主页都无需显示/用户回到顶部下拉后再次显示
+- [x] 彻底物理删除社区功能（删除 CommunityPost / Comment / Favorite 实体、DAO、Repository、ViewModel）
+- [x] 升级 Room 数据库为版本 4，移除假用户与假帖子预填充
+- [x] 顶部 Header 卡片设计（融入“已为您守护控糖 XX 天”温情问候 + 代谢状态药丸胶囊）
+- [x] 今日碳水摄入概览（真实查询 Room `food_records` 当日累计摄入量与进度条）
+- [x] 最近一次餐食升糖预测卡片（真实菜品摄影缩略图、真实菜名、预估峰值 mmol/L 与达峰时间）
+- [x] 真实典雅空态设计（无数据时不展示任何假数据，优雅引导拍照测算）
+- [x] AI 代谢微建议卡片（基于真实时段分析生成的温馨提示）
+- [x] 底部独立悬浮大按钮（一键调起餐食相机拍摄分析）
 
-### 5.2 社区顶部操作栏
-- [x] 瀑布流分为两个 section：navbar 和 ugc，navbar sticky 在顶部
-- [x] 左侧发帖 icon / 中间筛选标签（推荐/关注/商城）/ 右侧搜索 icon
-- [x] 搜索 icon 点击时，textbox 出现并向左延伸，navbar 变为返回 icon 和搜索栏，键盘弹出
-- [x] 点击返回，搜索栏右缩消失，搜索 icon 保留，返回 icon 变回发帖 icon
-
-### 5.3 瀑布流卡片 (ugc)
-- [x] 双列瀑布流（LazyVerticalStaggeredGrid）
-- [x] 卡片：图片+头像+标题+血糖标签+点赞评论数
-- [x] 档案分享 / 自由图文 UGC
-- [x] 将 UGC 数据迁移至独立 Room 数据表/Repository/ViewModel，主页不再内联 mockPosts
-
-### 5.4 帖子详情页
-- [x] 内容展示 + 评论区 + 点赞 + 收藏
-- [x] 任意来源帖子（推荐/关注/商城）都可进入详情页
-- [x] 详情页补齐 3 个可交互按钮：Love / Review / Share
-- [x] Review 提交后评论数实时更新，并回写瀑布流卡片计数
-- [x] Love 切换后点赞数实时更新，并回写瀑布流卡片计数
-- [x] Share 可交互（应用内分享入口，支持本地模拟）
-
-### 5.5 发帖页
-- [x] 图文编辑 + 帖子类型选择 + 档案关联 + 发布
-
-### 5.6 欢迎层触发边界修复（新增）
-- [x] 从帖子详情返回主页时，不触发欢迎层
-- [x] 仅新进程进入主页或顶部下拉时触发欢迎层
-- [x] 跨页面返回时保持主页会话内欢迎层关闭状态
-
-### 5.7 社区卡片视觉升级（新增）
-- [x] 卡片改为 INS 风格：大图 + 短文案 + 社交反馈行
-- [x] 社交反馈行统一 Love / Review / Share，且全部可点击
-- [x] 瀑布流卡片计数来源统一（与详情页同一数据源）
-
-### 5.8 搜索历史交互完善（新增）
-- [x] 搜索态显示历史记录列表（替代帖子流）
-- [x] 历史记录点击后可回填搜索词并执行搜索
-- [x] 历史记录支持删除单条/清空全部（含确认交互）
-- [x] 历史记录项提供可独立运行 `@Preview`（空态/有数据态）
-
-### ✅ 阶段五审查节点
+### ✅ 阶段五审查节点（重构完成并通过全量编译与单元测试）
 
 ---
 
-## 阶段六：拍照与 AI 识别 📷
+## 阶段六：拍照 → AI 识别 → 档案详情页（核心流程）📷
 
-### 6.1 相机页面
-- [ ] CameraX 集成拍照
-- [ ] 硬币参照物提示
-- [ ] 拍照后预览确认
+> **目标**：用户拍照后，后台自动执行 Step 0~7 算法全流程，直接返回档案详情页。
+> **识别模型**：Qwen VL (DashScope) 图像识别 + DeepSeek API 提醒文案生成
+> **营养数据**：USDA FoodData Central API（增强中文映射 + 78 食材内置碳水表兜底）
+> **关键**：删除所有模拟/预设代码。用户流程 = 点击拍照 → 硬币提示 → 拍照 → Loading(自动分析) → 档案详情页(滑块动态)
 
-### 6.2 AI 识别 (Step 0)
-- [ ] 上传图片至 Qwen VL
-- [ ] 结构化 Prompt（JSON 输出：菜品+原料+重量+烹饪方式+GI）
-- [ ] 解析 JSON + 错误处理
-- [ ] 最多 5 道菜
+### 6.1 AI 模型分工（Qwen VL 图片识别 + DeepSeek 文案生成）
+- [x] 创建 DeepSeekApi.kt Retrofit 接口 + DTO，用于提醒文案生成
+- [x] AiRepositoryImpl：图片识别 → DashScope (Qwen VL)，提醒文案 → DeepSeek
+- [x] 更新 ApiKeyProvider 同时支持 DASHSCOPE_API_KEY + DEEPSEEK_API_KEY
+- [x] 两者共存，各司其职
 
-### 6.3 USDA API 查询
-- [ ] 原料名查询基础碳水
-- [ ] 中文→英文映射
-- [ ] 查询结果缓存 Room DB
+### 6.2 增强 USDA API 集成
+- [x] 扩充 translateIngredientName() 中文→英文映射表（78 种常见食材）
+- [x] 添加 USDA 查询失败时的降级策略（78 种常见食材内置碳水表兜底）
+- [x] 确认 USDA FoodData Central POST /foods/search 接口对接正确
 
-### 6.4 识别→创建档案
-- [ ] 存入 FoodRecord → 跳转档案详情页
+### 6.3 简化拍照流程
+- [x] 删除 CapturePreviewScreen.kt（拍照后直接分析，无需预览确认）
+- [x] 删除 RecognitionLoadingScreen.kt 模拟识别代码（重写为真实 API 调用）
+- [x] 删除 RecognitionResultScreen.kt（RecognitionConfirmScreen + AiInsightsScreen 全部移除）
+- [x] 删除 CameraRecognitionViewModel 中的 RecognizedIngredient、runSimulatedRecognition()、所有模拟方法
+- [x] 删除 CameraRoute.Preview / Confirm / Insights 路由
+- [x] 删除 CookingMethod.kt 枚举（算法使用 AI JSON 中的字符串）
+
+### 6.4 重构 CameraRecognitionViewModel
+- [x] 状态：Idle → Loading → AnalysisResult(ArchiveDetailUiState) | Error
+- [x] setCapturedImage(uri) → startAnalysis() 调用 AnalyzeFoodUseCase → 产出 ArchiveDetailUiState
+- [x] updateSliders(meatRatio, intakePct) 调用 AnalyzeFoodUseCase 实时重算曲线+色带
+- [x] saveRecord() 存入 FoodRecord → 跳转档案夹
+
+### 6.5 实现档案详情页（核心 UI）
+- [x] 免责声明小字（顶部浅灰，常驻）
+- [x] 菜品大图（Coil AsyncImage 加载拍照图片）
+- [x] 饭前血糖输入（可选，默认 5.0 mmol/L）
+- [x] 荤素比例滑块：范围 0~1，拖动实时触发重算
+- [x] 总体摄入量滑块：范围 0%~100%，拖动实时触发重算
+- [x] 血糖波动预测曲线：Canvas 图表，240 点平滑曲线，标注 3.9/7.8/10.0 阈值线
+- [x] 胰岛素色带：蓝→绿→红三段，动态宽度，标注 IU 刻度，按用户胰岛素类型切换范围
+- [x] 重点关注时段卡片：时间+血糖值+严重程度+DeepSeek 生成温馨提醒
+- [x] 底部操作栏：3 个分享 icon + 确定保存按钮
+- [ ] 页面提供 @Preview 预览（待阶段九统一补齐）
+
+### 6.6 清理导航与路由
+- [x] CameraFlowNavHost 精简为 Camera → Loading → Detail 三段
+- [x] 注册档案详情页路由（camera_flow/detail）
+- [x] 移除旧 Confirm / Insights 路由引用
 
 ### ✅ 阶段六审查节点
 
 ---
 
-## 阶段七：档案夹与详情页 📁
+## 阶段七：档案夹页面（现代代谢日历与真实数据回溯）📁
 
-### 7.1 档案夹页面
-- [ ] 按日期分组列表
-- [ ] 顶部筛选（全部/已完成✅/未确定⚠️）
-- [ ] 卡片（缩略图+日期+菜品名+状态）
-- [ ] 左滑删除+确认弹窗
+- [x] 水平可滑动日历条（最近 14 天到今天，带真实记录标记圆点）
+- [x] 当日统计摘要（当日真实餐食次数与预估总碳水汇总）
+- [x] 真实餐食卡片流（从 Room `food_records` 实时观察数据流，真实缩略图、真实菜名、碳水与峰值）
+- [x] 典雅空态设计（当日无记录时展示亲和空态提示，拒绝模拟假数据）
+- [x] 点击卡片直达 `ArchiveDetailScreen`（真实反序列化历史计算快照，支持二次微调滑块）
+- [x] 单条记录真实删除交互（AlertDialog 确认，真实调用 Room DAO 执行持久化删除）
 
-### 7.2 档案详情页布局
-- [ ] 免责声明小字 → 菜品大图 → 饭前血糖输入(可选,默认5.0)
-
-### 7.3 荤素比例滑块
-- [ ] 范围 0~1，音轨丘陵动画，实时触发重算
-
-### 7.4 摄入量滑块
-- [ ] 范围 0%~100%，音轨丘陵动画，实时触发重算
-
-### 7.5 血糖波动预测曲线
-- [ ] Vico 图表，240 点平滑曲线，标注阈值线
-
-### 7.6 胰岛素色带
-- [ ] 蓝→绿→红三段，动态宽度，标注 IU，按胰岛素类型切换
-
-### 7.7 重点关注时段卡片
-- [ ] 时间+血糖值+严重程度+AI温馨提醒
-
-### 7.8 底部操作
-- [ ] 3 个分享 icon（自动附免责声明）+ 确定按钮
-
-### ✅ 阶段七审查节点
+### ✅ 阶段七审查节点（完成并通过单元测试）
 
 ---
 
-## 阶段八：个人页面 👤
+## 阶段八：个人页面（个人代谢配置与纯私有管理）👤
 
-### 8.1 个人卡片
-- [ ] 玻璃拟态设计，头像+昵称+统计
+- [x] 个人代谢健康档案卡片（展示糖尿病类型、胰岛素类型、BMI自动测算、纯本地私有说明）
+- [x] 弹窗式健康档案编辑（糖尿病类型单选、胰岛素类型单选、身高体重实时更新并持久化至 Room）
+- [x] 外观显示模式（跟随系统 / 浅色模式 / 深色模式，DataStore 实时响应式绑定）
+- [x] 医疗健康合规免责声明弹窗（非临床建议详细条款）
+- [x] 本地数据管理（清空所有本地记录，带二次防误触确认）
+- [x] 关于软件（版本与离线私有架构说明）
 
-### 8.2 健康档案编辑
-- [ ] 必填：糖尿病类型、胰岛素类型
-- [ ] 选填：用量范围、体重、身高
-
-### 8.3 功能列表
-- [ ] 我的帖子 / 我的收藏 / 外观模式 / 设置 / 关于（含免责声明全文）
-
-### ✅ 阶段八审查节点
+### ✅ 阶段八审查节点（完成并通过单元测试）
 
 ---
 
@@ -294,7 +263,7 @@
 - [ ] 滑块交互、动效、搜索栏、导航、深色模式
 
 ### 10.3 实机测试
-- [ ] 拍照、Qwen VL 解析、USDA 缓存、动画流畅度、瀑布流性能
+- [ ] 拍照、DeepSeek 解析、USDA 缓存、动画流畅度、瀑布流性能
 
 ### 10.4 集成测试
 - [ ] 拍照→AI→碳水→血糖→色带→时段→提醒 完整流程

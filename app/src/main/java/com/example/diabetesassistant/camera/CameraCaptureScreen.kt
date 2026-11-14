@@ -1,24 +1,18 @@
 package com.example.diabetesassistant.camera
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
-import androidx.compose.foundation.Canvas
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,60 +20,67 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.example.diabetesassistant.R
-import com.example.diabetesassistant.ui.components.GlassCard
-import com.example.diabetesassistant.ui.components.GreenGlassBackground
+import coil.compose.AsyncImage
 import java.io.File
-import java.util.concurrent.Executors
 
-private val CameraGreen = Color(0xFF17DC66)
-private val CameraDarkGreen = Color(0xFF008A3D)
-private val CameraInk = Color(0xFF173025)
-private val CameraMuted = Color(0xFF64746B)
+private val StagingBg = Color(0xFFF7FAF8)
+private val BrandForest = Color(0xFF144D30)
+private val BrandGreen = Color(0xFF227B4E)
+private val BrandMint = Color(0xFF52B788)
+private val BrandLightMint = Color(0xFFE8F5EE)
+private val StagingBorder = Color(0xFFDCE6DF)
+private val TextDark = Color(0xFF1A2620)
+private val TextMuted = Color(0xFF4A5568)
 
 private fun copyPickedImageToCache(context: android.content.Context, source: Uri): Uri {
     val dir = File(context.cacheDir, "camera_captures").apply { mkdirs() }
-    val outFile = File(dir, "picked_${System.currentTimeMillis()}.jpg")
+    val outFile = File(dir, "picked_${System.currentTimeMillis()}_${(100..999).random()}.jpg")
     context.contentResolver.openInputStream(source)?.use { input ->
         outFile.outputStream().use { output -> input.copyTo(output) }
-    } ?: error("openInputStream null")
+    } ?: error("无法打开相册图片")
     return FileProvider.getUriForFile(
         context,
         "${context.packageName}.fileprovider",
@@ -87,352 +88,401 @@ private fun copyPickedImageToCache(context: android.content.Context, source: Uri
     )
 }
 
+private fun createCameraTempUri(context: android.content.Context): Uri {
+    val dir = File(context.cacheDir, "camera_captures").apply { mkdirs() }
+    val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
+    return FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        file,
+    )
+}
+
+/**
+ * 现代极简餐盘多图暂存台
+ * 直接调用手机自带系统相机与相册多选，无多余冗杂扫描框。
+ */
 @Composable
 fun CameraCaptureScreen(
     viewModel: CameraRecognitionViewModel,
     onExitCamera: () -> Unit,
-    onNavigateToPreview: () -> Unit,
+    onNavigateToLoading: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
-    DisposableEffect(Unit) {
-        onDispose { cameraExecutor.shutdown() }
-    }
+    val uiState by viewModel.uiState.collectAsState()
+    val stagedImages = uiState.stagedImages
 
-    val imageCapture = remember {
-        ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-            .build()
-    }
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
 
-    val previewView = remember(context) {
-        PreviewView(context).apply {
-            implementationMode = PreviewView.ImplementationMode.PERFORMANCE
-            scaleType = PreviewView.ScaleType.FILL_CENTER
+    // 1. 系统自带原生相机调用
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture(),
+    ) { success ->
+        if (success) {
+            pendingCameraUri?.let { uri ->
+                viewModel.addStagedImage(uri.toString())
+            }
         }
     }
 
-    var hasPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
-                PackageManager.PERMISSION_GRANTED,
-        )
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { granted -> hasPermission = granted },
-    )
-
-    val pickImageLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        try {
-            val stableUri = copyPickedImageToCache(context, uri)
-            viewModel.setPendingCaptureUri(stableUri.toString())
-            onNavigateToPreview()
-        } catch (_: Exception) {
-            Toast.makeText(context, R.string.camera_pick_failed, Toast.LENGTH_SHORT).show()
+    // 2. 系统相册多图选取
+    val pickMultipleLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 6),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            val copiedUris = uris.mapNotNull { uri ->
+                try {
+                    copyPickedImageToCache(context, uri).toString()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            viewModel.addStagedImages(copiedUris)
         }
     }
 
-    fun launchGalleryPicker() {
-        pickImageLauncher.launch(
+    fun launchNativeCamera() {
+        if (stagedImages.size >= 6) {
+            Toast.makeText(context, "一次最多添加 6 张餐盘照片", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val uri = createCameraTempUri(context)
+        pendingCameraUri = uri
+        takePictureLauncher.launch(uri)
+    }
+
+    fun launchGallery() {
+        if (stagedImages.size >= 6) {
+            Toast.makeText(context, "一次最多添加 6 张餐盘照片", Toast.LENGTH_SHORT).show()
+            return
+        }
+        pickMultipleLauncher.launch(
             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
         )
     }
 
-    fun takePhoto() {
-        val dir = File(context.cacheDir, "camera_captures").apply { mkdirs() }
-        val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
-        val opts = ImageCapture.OutputFileOptions.Builder(file).build()
-        val mainEx = ContextCompat.getMainExecutor(context)
-        imageCapture.takePicture(
-            opts,
-            cameraExecutor,
-            object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    val uri = output.savedUri ?: FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file,
+    Surface(
+        modifier = modifier.fillMaxSize(),
+        color = StagingBg,
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // 顶部导航栏
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onExitCamera) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回",
+                        tint = BrandForest,
                     )
-                    viewModel.setPendingCaptureUri(uri.toString())
-                    mainEx.execute { onNavigateToPreview() }
                 }
-
-                override fun onError(exception: ImageCaptureException) {
-                    mainEx.execute {
-                        Toast.makeText(
-                            context,
-                            exception.message ?: "",
-                            Toast.LENGTH_SHORT,
-                        ).show()
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "记录本次餐盘",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextDark,
+                    )
+                    Text(
+                        text = "支持拍摄或上传多道菜品，一次性合并测算",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted,
+                    )
+                }
+                if (stagedImages.isNotEmpty()) {
+                    IconButton(onClick = { viewModel.clearStagedImages() }) {
+                        Icon(
+                            imageVector = Icons.Filled.DeleteSweep,
+                            contentDescription = "清空全部",
+                            tint = Color(0xFFD62828),
+                        )
                     }
                 }
-            },
-        )
-    }
+            }
 
-    DisposableEffect(lifecycleOwner, previewView, hasPermission) {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-        val mainExecutor = ContextCompat.getMainExecutor(context)
-        val listener = Runnable {
-            if (!hasPermission) return@Runnable
-            val cameraProvider = cameraProviderFuture.get()
-            val preview = Preview.Builder().build().also {
-                it.surfaceProvider = previewView.surfaceProvider
-            }
-            try {
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
-                    lifecycleOwner,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
-                    preview,
-                    imageCapture,
-                )
-            } catch (_: Exception) {
-                Toast.makeText(context, R.string.camera_permission_rationale, Toast.LENGTH_SHORT).show()
-            }
-        }
-        cameraProviderFuture.addListener(listener, mainExecutor)
-        onDispose {
-            if (hasPermission) {
-                try {
-                    cameraProviderFuture.get().unbindAll()
-                } catch (_: Exception) {
-                }
-            }
-        }
-    }
-
-    GreenGlassBackground(modifier = modifier) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (hasPermission) {
-                AndroidView(
-                    factory = { previewView },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .alpha(0.16f),
-                )
+            // 主展示区
+            if (stagedImages.isEmpty()) {
+                // 空态：提供大卡片引导拍照与选图
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.White.copy(alpha = 0.50f)),
-                )
-            CameraTopBar(onBackClick = onExitCamera)
-
-                Text(
-                    text = "请将硬币放入画面作尺寸参照",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = CameraDarkGreen,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 74.dp),
-                )
-
-                ScannerFrame(
-                    modifier = Modifier
-                        .align(Alignment.Center)
                         .fillMaxWidth()
-                        .height(270.dp)
-                        .padding(horizontal = 46.dp),
-                )
-                CameraControls(
-                    onGalleryClick = { launchGalleryPicker() },
-                    onShutterClick = { takePhoto() },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 36.dp),
-                )
+                        .weight(1f)
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(88.dp)
+                                .clip(CircleShape)
+                                .background(BrandLightMint),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Restaurant,
+                                contentDescription = null,
+                                tint = BrandGreen,
+                                modifier = Modifier.size(46.dp),
+                            )
+                        }
+
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = "拍摄这一餐的全部菜品与主食",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = TextDark,
+                            )
+                            Text(
+                                text = "支持一次拍摄多张照片（例如主菜、米饭、汤碗）。\nAI 将自动合并所有菜品清单，精准测算整餐升糖负荷。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextMuted,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 22.sp,
+                            )
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        Button(
+                            onClick = { launchNativeCamera() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = BrandGreen,
+                                contentColor = Color.White,
+                            ),
+                        ) {
+                            Icon(Icons.Filled.CameraAlt, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text("调用系统相机拍照", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+
+                        OutlinedButton(
+                            onClick = { launchGallery() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, BrandGreen),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = BrandGreen),
+                        ) {
+                            Icon(Icons.Filled.PhotoLibrary, contentDescription = null, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text("从手机相册多选", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             } else {
-            CameraTopBar(onBackClick = onExitCamera)
-                PermissionGlassPanel(
-                    onGrantClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                    onGalleryClick = { launchGalleryPicker() },
+                // 已有照片暂存网格
+                Column(
                     modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(horizontal = 24.dp),
-                )
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "已添加照片 (${stagedImages.size}/6)",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TextDark,
+                        )
+                        Text(
+                            text = "可点击右上方 × 移除单张",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted,
+                        )
+                    }
+
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(bottom = 16.dp),
+                    ) {
+                        itemsIndexed(stagedImages) { index, uriString ->
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(170.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, StagingBorder),
+                            ) {
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    AsyncImage(
+                                        model = uriString,
+                                        contentDescription = "已选菜品 $index",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+
+                                    // 菜品序号胶囊
+                                    Surface(
+                                        shape = RoundedCornerShape(bottomEnd = 10.dp),
+                                        color = BrandForest.copy(alpha = 0.85f),
+                                        modifier = Modifier.align(Alignment.TopStart),
+                                    ) {
+                                        Text(
+                                            text = "菜品 ${index + 1}",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                        )
+                                    }
+
+                                    // 单张删除按钮
+                                    Surface(
+                                        onClick = { viewModel.removeStagedImage(uriString) },
+                                        shape = CircleShape,
+                                        color = Color.Black.copy(alpha = 0.65f),
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(6.dp)
+                                            .size(28.dp),
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Close,
+                                                contentDescription = "移除此图",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 如果未满 6 张，显示添加更多按钮卡片
+                        if (stagedImages.size < 6) {
+                            item {
+                                Card(
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.5.dp,
+                                        BrandMint.copy(alpha = 0.5f)
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(170.dp),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.Center,
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                    ) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            IconButton(
+                                                onClick = { launchNativeCamera() },
+                                                modifier = Modifier
+                                                    .size(44.dp)
+                                                    .background(BrandLightMint, CircleShape),
+                                            ) {
+                                                Icon(
+                                                    Icons.Filled.AddAPhoto,
+                                                    contentDescription = "继续拍照",
+                                                    tint = BrandGreen,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = { launchGallery() },
+                                                modifier = Modifier
+                                                    .size(44.dp)
+                                                    .background(BrandLightMint, CircleShape),
+                                            ) {
+                                                Icon(
+                                                    Icons.Filled.AddPhotoAlternate,
+                                                    contentDescription = "相册加图",
+                                                    tint = BrandGreen,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
+                                            text = "追加菜品图片",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = BrandForest,
+                                        )
+                                        Text(
+                                            text = "拍照或相册选图",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextMuted,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
-        }
-    }
-}
 
-@Composable
-private fun CameraTopBar(onBackClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Surface(
-                onClick = onBackClick,
-                shape = CircleShape,
-                color = Color.Transparent,
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回首页",
-                    tint = CameraDarkGreen,
-                    modifier = Modifier
-                        .padding(4.dp)
-                        .size(24.dp),
-                )
-            }
-            Icon(
-                imageVector = Icons.Filled.AccountCircle,
-                contentDescription = null,
-                tint = Color(0xFF2D6B61),
-                modifier = Modifier.size(34.dp),
-            )
-            Text(
-                text = "糖控助手",
-                style = MaterialTheme.typography.titleMedium,
-                color = CameraDarkGreen,
-                fontWeight = FontWeight.ExtraBold,
-            )
-        }
-        Icon(
-            imageVector = Icons.Filled.Notifications,
-            contentDescription = null,
-            tint = CameraDarkGreen,
-            modifier = Modifier.size(22.dp),
-        )
-    }
-}
-
-@Composable
-private fun ScannerFrame(modifier: Modifier = Modifier) {
-    Box(modifier = modifier) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val corner = 32.dp.toPx()
-            val stroke = 2.dp.toPx()
-            val lineY = size.height * 0.5f
-            val glow = CameraGreen.copy(alpha = 0.14f)
-            val guide = CameraGreen.copy(alpha = 0.72f)
-
-            drawLine(glow, Offset(0f, lineY), Offset(size.width, lineY), strokeWidth = 18.dp.toPx(), cap = StrokeCap.Round)
-            drawLine(guide, Offset(0f, lineY), Offset(size.width, lineY), strokeWidth = 1.4.dp.toPx(), cap = StrokeCap.Round)
-
-            drawLine(guide, Offset(0f, 0f), Offset(corner, 0f), strokeWidth = stroke, cap = StrokeCap.Round)
-            drawLine(guide, Offset(0f, 0f), Offset(0f, corner), strokeWidth = stroke, cap = StrokeCap.Round)
-
-            drawLine(guide, Offset(size.width, 0f), Offset(size.width - corner, 0f), strokeWidth = stroke, cap = StrokeCap.Round)
-            drawLine(guide, Offset(size.width, 0f), Offset(size.width, corner), strokeWidth = stroke, cap = StrokeCap.Round)
-
-            drawLine(guide, Offset(0f, size.height), Offset(corner, size.height), strokeWidth = stroke, cap = StrokeCap.Round)
-            drawLine(guide, Offset(0f, size.height), Offset(0f, size.height - corner), strokeWidth = stroke, cap = StrokeCap.Round)
-
-            drawLine(guide, Offset(size.width, size.height), Offset(size.width - corner, size.height), strokeWidth = stroke, cap = StrokeCap.Round)
-            drawLine(guide, Offset(size.width, size.height), Offset(size.width, size.height - corner), strokeWidth = stroke, cap = StrokeCap.Round)
-        }
-    }
-}
-
-@Composable
-private fun CameraControls(
-    onGalleryClick: () -> Unit,
-    onShutterClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        Surface(
-            onClick = onGalleryClick,
-            modifier = Modifier
-                .size(48.dp)
-                .border(1.dp, Color.White.copy(alpha = 0.72f), CircleShape),
-            shape = CircleShape,
-            color = Color.White.copy(alpha = 0.58f),
-            shadowElevation = 8.dp,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Outlined.PhotoLibrary,
-                    contentDescription = stringResource(R.string.camera_pick_gallery),
-                    tint = CameraDarkGreen,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-        }
-        Spacer(modifier = Modifier.size(20.dp))
-        Surface(
-            onClick = onShutterClick,
-            modifier = Modifier
-                .size(82.dp)
-                .shadow(
-                    elevation = 32.dp,
-                    shape = CircleShape,
-                    ambientColor = CameraGreen.copy(alpha = 0.70f),
-                    spotColor = CameraGreen.copy(alpha = 0.70f),
-                )
-                .border(1.dp, Color.White.copy(alpha = 0.70f), CircleShape),
-            shape = CircleShape,
-            color = CameraGreen,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Filled.CameraAlt,
-                    contentDescription = stringResource(R.string.camera_shutter),
-                    tint = Color.White,
-                    modifier = Modifier.size(30.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PermissionGlassPanel(
-    onGrantClick: () -> Unit,
-    onGalleryClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    GlassCard(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.camera_permission_rationale),
-                style = MaterialTheme.typography.titleMedium,
-                color = CameraInk,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = stringResource(R.string.camera_pick_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = CameraMuted,
-                textAlign = TextAlign.Center,
-            )
-            Button(
-                onClick = onGrantClick,
-                colors = ButtonDefaults.buttonColors(containerColor = CameraDarkGreen),
-            ) {
-                Text(stringResource(R.string.camera_grant_permission))
-            }
-            OutlinedButton(onClick = onGalleryClick) {
-                Icon(
-                    Icons.Outlined.PhotoLibrary,
-                    contentDescription = null,
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                Text(stringResource(R.string.camera_pick_gallery))
+            // 底部启动分析栏
+            if (stagedImages.isNotEmpty()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color.White,
+                    shadowElevation = 10.dp,
+                    shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Button(
+                            onClick = onNavigateToLoading,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = BrandGreen,
+                                contentColor = Color.White,
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+                        ) {
+                            Icon(Icons.Filled.Restaurant, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "开始智能分析餐盘 (${stagedImages.size} 张)",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

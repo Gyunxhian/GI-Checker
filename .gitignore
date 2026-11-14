@@ -1,13 +1,8 @@
 *.iml
 .gradle
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-/.idea/inspectionProfiles
+.idea/
+/.idea/
 .DS_Store
 /build
 /captures
@@ -17,3 +12,5 @@ local.properties
 /Vibe_Coding/架构需求.md
 /Vibe_Coding/error/
 /.claude
+AGENT.md
+技术路线.txt

@@ -1,195 +1,381 @@
-﻿package com.example.diabetesassistant.camera
+package com.example.diabetesassistant.camera
 
+import android.content.Context
+import android.util.Log
+import android.widget.Toast
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.diabetesassistant.data.local.entity.FoodRecord
+import com.example.diabetesassistant.data.local.entity.FoodRecordStatus
+import com.example.diabetesassistant.data.model.DishRecognitionResult
+import com.example.diabetesassistant.data.model.InsulinType
+import com.example.diabetesassistant.data.remote.NetworkResult
+import com.example.diabetesassistant.data.repository.FoodRecordRepository
+import com.example.diabetesassistant.domain.algorithm.BloodSugarPoint
+import com.example.diabetesassistant.domain.algorithm.BloodSugarPrediction
+import com.example.diabetesassistant.domain.algorithm.FocusPeriod
+import com.example.diabetesassistant.domain.algorithm.InsulinBandResult
+import com.example.diabetesassistant.domain.usecase.AnalyzeFoodUseCase
+import com.google.gson.Gson
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-data class RecognizedIngredient(
-    val name: String,
-    val portionGrams: Int,
-    val caloriesPer100g: Int,
-    val sugarPer100g: Float,
-    val cookingMethod: CookingMethod,
+private const val TAG = "Diabetes|CameraVM"
+
+data class ArchiveDetailUiState(
+    val imageUri: String = "",
+    val stagedImages: List<String> = emptyList(),
+    val isLoading: Boolean = false,
+    val isRecalculating: Boolean = false,
+    val isSaving: Boolean = false,
+    val error: String? = null,
+    val totalCarbIntake: Float = 0f,
+    val weightedGi: Float = 0f,
+    val bloodSugarPrediction: BloodSugarPrediction? = null,
+    val insulinBand: InsulinBandResult? = null,
+    val focusPeriods: List<FocusPeriod> = emptyList(),
+    val reminders: List<String> = emptyList(),
+    val meatRatio: Float = 0.5f,
+    val intakePercent: Float = 0.6f,
+    val bloodSugarStart: Float = 5.0f,
+    val insulinType: InsulinType = InsulinType.RAPID,
+    val savedFoodRecordId: Long? = null,
+    val recognitionResult: DishRecognitionResult? = null,
+    val ingredientCarbsMap: Map<String, Float> = emptyMap(),
 )
 
-class CameraRecognitionViewModel : ViewModel() {
+@HiltViewModel
+class CameraRecognitionViewModel @Inject constructor(
+    private val analyzeFoodUseCase: AnalyzeFoodUseCase,
+    private val foodRecordRepository: FoodRecordRepository,
+    @ApplicationContext private val context: Context,
+) : ViewModel() {
 
-    private val _pendingImageUri = MutableStateFlow<String?>(null)
-    val pendingImageUri: StateFlow<String?> = _pendingImageUri.asStateFlow()
+    private val _uiState = MutableStateFlow(ArchiveDetailUiState())
+    val uiState: StateFlow<ArchiveDetailUiState> = _uiState.asStateFlow()
 
-    private val _ingredients = MutableStateFlow<List<String>>(emptyList())
-    val ingredients: StateFlow<List<String>> = _ingredients.asStateFlow()
+    private val gson = Gson()
 
-    private val _recognizedIngredients = MutableStateFlow<List<RecognizedIngredient>>(emptyList())
-    val recognizedIngredients: StateFlow<List<RecognizedIngredient>> = _recognizedIngredients.asStateFlow()
+    private var cachedRecognitionResult: DishRecognitionResult? = null
+    private var recalcDebounceJob: Job? = null
 
-    private val _estimatedSugarGrams = MutableStateFlow(0f)
-    val estimatedSugarGrams: StateFlow<Float> = _estimatedSugarGrams.asStateFlow()
-
-    private val _suggestedInsulinUnits = MutableStateFlow(0f)
-    val suggestedInsulinUnits: StateFlow<Float> = _suggestedInsulinUnits.asStateFlow()
-
-    fun setPendingCaptureUri(uriString: String) {
-        _pendingImageUri.value = uriString
+    fun setCapturedImage(uri: String) {
+        Log.i(TAG, "设置图片URI: $uri")
+        _uiState.update { it.copy(imageUri = uri, stagedImages = listOf(uri)) }
     }
 
-    fun updateIngredient(index: Int, value: String) {
-        _ingredients.update { list ->
-            list.mapIndexed { i, item -> if (i == index) value else item }
+    fun addStagedImage(uri: String) {
+        if (uri.isBlank()) return
+        _uiState.update { current ->
+            val updated = (current.stagedImages + uri).distinct().take(6)
+            current.copy(stagedImages = updated, imageUri = updated.joinToString("|"))
         }
-        _recognizedIngredients.update { list ->
-            list.mapIndexed { i, item -> if (i == index) item.copy(name = value) else item }
+    }
+
+    fun addStagedImages(uris: List<String>) {
+        if (uris.isEmpty()) return
+        _uiState.update { current ->
+            val updated = (current.stagedImages + uris).distinct().take(6)
+            current.copy(stagedImages = updated, imageUri = updated.joinToString("|"))
         }
-        recomputeEstimates()
     }
 
-    fun removeIngredient(index: Int) {
-        _ingredients.update { list -> list.filterIndexed { i, _ -> i != index } }
-        _recognizedIngredients.update { list -> list.filterIndexed { i, _ -> i != index } }
-        recomputeEstimates()
-    }
-
-    fun addIngredient(name: String = "") {
-        _ingredients.update { it + name }
-        _recognizedIngredients.update {
-            it + RecognizedIngredient(
-                name = name.ifBlank { "新增食材" },
-                portionGrams = 100,
-                caloriesPer100g = 80,
-                sugarPer100g = 8f,
-                cookingMethod = CookingMethod.Other,
-            )
+    fun removeStagedImage(uri: String) {
+        _uiState.update { current ->
+            val updated = current.stagedImages.filter { it != uri }
+            current.copy(stagedImages = updated, imageUri = updated.joinToString("|"))
         }
-        recomputeEstimates()
     }
 
-    fun adjustIngredientWeight(index: Int, deltaGrams: Int) {
-        _recognizedIngredients.update { list ->
-            list.mapIndexed { i, item ->
-                if (i == index) {
-                    item.copy(portionGrams = (item.portionGrams + deltaGrams).coerceIn(10, 600))
-                } else {
-                    item
+    fun clearStagedImages() {
+        _uiState.update { it.copy(stagedImages = emptyList(), imageUri = "") }
+    }
+
+    suspend fun startAnalysis() {
+        val state = _uiState.value
+        val images = if (state.stagedImages.isNotEmpty()) state.stagedImages else listOf(state.imageUri).filter { it.isNotBlank() }
+        Log.i(TAG, "===== 开始分析 (${images.size}张图片) =====")
+        if (images.isEmpty()) {
+            Log.w(TAG, "图片列表为空，跳过分析")
+            return
+        }
+        _uiState.update { it.copy(isLoading = true, error = null) }
+        try {
+            when (val result = analyzeFoodUseCase(
+                imageUrls = images,
+                meatRatio = state.meatRatio,
+                intakePercent = state.intakePercent,
+                insulinType = state.insulinType,
+                bloodSugarStart = state.bloodSugarStart,
+            )) {
+                is NetworkResult.Success -> {
+                    cachedRecognitionResult = result.data.recognitionResult
+                    Log.i(TAG, "分析成功: carb=${result.data.totalCarbIntake}g, GI=${result.data.weightedGi}, periods=${result.data.focusPeriods.size}")
+                    _uiState.update {
+                        it.copy(isLoading = false, error = null,
+                            totalCarbIntake = result.data.totalCarbIntake,
+                            weightedGi = result.data.weightedGi,
+                            bloodSugarPrediction = result.data.bloodSugarPrediction,
+                            insulinBand = result.data.insulinBand,
+                            focusPeriods = result.data.focusPeriods,
+                            reminders = result.data.reminders,
+                            recognitionResult = result.data.recognitionResult,
+                            ingredientCarbsMap = result.data.ingredientCarbsMap,
+                        )
+                    }
+                    autoSaveRecord()
+                }
+                is NetworkResult.Error -> {
+                    Log.e(TAG, "分析失败: ${result.message}")
+                    _uiState.update { it.copy(isLoading = false, error = result.message) }
                 }
             }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.e(TAG, "分析异常: ${e.message}", e)
+            _uiState.update { it.copy(isLoading = false, error = e.message ?: "分析失败") }
         }
-        recomputeEstimates()
     }
 
-    fun updateIngredientCookingMethod(index: Int, method: CookingMethod) {
-        _recognizedIngredients.update { list ->
-            list.mapIndexed { i, item ->
-                if (i == index) item.copy(cookingMethod = method) else item
-            }
-        }
-        recomputeEstimates()
+    fun updateMeatRatio(ratio: Float) {
+        val clamped = ratio.coerceIn(0f, 1f)
+        if (clamped == _uiState.value.meatRatio) return
+        Log.i(TAG, "荤素比变更: $clamped")
+        _uiState.update { it.copy(meatRatio = clamped) }
+        debounceRecalculation()
     }
 
-    fun splitIngredientCooking(index: Int) {
-        _recognizedIngredients.update { list ->
-            val item = list.getOrNull(index) ?: return@update list
-            if (item.portionGrams <= 20) return@update list
-            val firstPortion = item.portionGrams / 2
-            val secondPortion = item.portionGrams - firstPortion
-            list.flatMapIndexed { i, current ->
-                if (i == index) {
-                    listOf(
-                        current.copy(portionGrams = firstPortion),
-                        current.copy(
-                            portionGrams = secondPortion,
-                            cookingMethod = CookingMethod.Other,
-                        ),
+    fun updateIntakePercent(percent: Float) {
+        val clamped = percent.coerceIn(0f, 1f)
+        if (clamped == _uiState.value.intakePercent) return
+        Log.i(TAG, "摄入比变更: $clamped")
+        _uiState.update { it.copy(intakePercent = clamped) }
+        debounceRecalculation()
+    }
+
+    fun updateBloodSugarStart(bg: Float) {
+        val clamped = bg.coerceIn(2.0f, 20.0f)
+        if (clamped == _uiState.value.bloodSugarStart) return
+        Log.i(TAG, "血糖变更: $clamped")
+        _uiState.update { it.copy(bloodSugarStart = clamped) }
+        debounceRecalculation()
+    }
+
+    fun updateInsulinType(type: InsulinType) {
+        if (type == _uiState.value.insulinType) return
+        Log.i(TAG, "胰岛素类型变更: $type")
+        _uiState.update { it.copy(insulinType = type) }
+        debounceRecalculation()
+    }
+
+    fun loadRecord(recordId: Long) {
+        viewModelScope.launch {
+            try {
+                val record = foodRecordRepository.getById(recordId) ?: return@launch
+                val parsed = try {
+                    gson.fromJson(record.aiJson, AnalysisResultJson::class.java)
+                } catch (e: Exception) {
+                    null
+                }
+                cachedRecognitionResult = parsed?.recognitionResult
+                val staged = record.imagePath.split("|").filter { it.isNotBlank() }
+                _uiState.update {
+                    it.copy(
+                        imageUri = record.imagePath,
+                        stagedImages = staged,
+                        savedFoodRecordId = record.id,
+                        totalCarbIntake = parsed?.totalCarbIntake ?: 0f,
+                        weightedGi = parsed?.weightedGi ?: 0f,
+                        meatRatio = parsed?.meatRatio ?: 0.5f,
+                        intakePercent = parsed?.intakePercent ?: 0.6f,
+                        bloodSugarStart = parsed?.bloodSugarStart ?: 5.0f,
+                        insulinType = try {
+                            InsulinType.valueOf(parsed?.insulinType ?: "RAPID")
+                        } catch (e: Exception) {
+                            InsulinType.RAPID
+                        },
+                        bloodSugarPrediction = if (parsed?.curvePoints != null) {
+                            val peak = parsed.curvePoints.maxOfOrNull { pt -> pt.bloodSugar } ?: 5.0f
+                            val peakMin = parsed.curvePoints.maxByOrNull { pt -> pt.bloodSugar }?.minute ?: 60
+                            BloodSugarPrediction(
+                                points = parsed.curvePoints,
+                                gammaParams = com.example.diabetesassistant.domain.algorithm.GammaParams(1.5f, 20f),
+                                peakMinute = peakMin,
+                                peakBloodSugar = peak,
+                            )
+                        } else null,
+                        insulinBand = parsed?.insulinBand,
+                        focusPeriods = parsed?.focusPeriods ?: emptyList(),
+                        reminders = parsed?.reminders ?: emptyList(),
+                        recognitionResult = parsed?.recognitionResult,
+                        isLoading = false,
+                        error = null,
                     )
-                } else {
-                    listOf(current)
                 }
+                Log.i(TAG, "已加载真实档案: id=$recordId, carb=${parsed?.totalCarbIntake}g")
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.e(TAG, "加载档案异常: ${e.message}", e)
             }
         }
-        syncLegacyIngredientNames()
-        recomputeEstimates()
     }
 
-    suspend fun runSimulatedRecognition() {
-        delay(2400L)
-        val recognized = listOf(
-            RecognizedIngredient(
-                name = "米饭（白米）",
-                portionGrams = 150,
-                caloriesPer100g = 130,
-                sugarPer100g = 28.5f,
-                cookingMethod = CookingMethod.Steam,
-            ),
-            RecognizedIngredient(
-                name = "煎鸡胸肉",
-                portionGrams = 120,
-                caloriesPer100g = 165,
-                sugarPer100g = 0.2f,
-                cookingMethod = CookingMethod.StirFry,
-            ),
-            RecognizedIngredient(
-                name = "水煮西兰花",
-                portionGrams = 80,
-                caloriesPer100g = 34,
-                sugarPer100g = 4.0f,
-                cookingMethod = CookingMethod.Boil,
-            ),
-        )
-        _recognizedIngredients.value = recognized
-        _ingredients.value = recognized.map { it.name }
-        recomputeEstimates()
-    }
-
-    private fun recomputeEstimates() {
-        val base = _recognizedIngredients.value.sumOf { ingredient ->
-            (
-                ingredient.sugarPer100g *
-                    ingredient.portionGrams /
-                    100f *
-                    cookingMethodFactor(ingredient.cookingMethod)
-                ).toDouble()
-        }.toFloat()
-        val sugar = base.coerceIn(4f, 85f)
-        _estimatedSugarGrams.value = sugar
-        _suggestedInsulinUnits.value = (sugar / 15f).coerceIn(0.5f, 14f)
-    }
-
-    fun ingredientSugarGrams(ingredient: RecognizedIngredient): Float {
-        return ingredient.sugarPer100g *
-            ingredient.portionGrams /
-            100f *
-            cookingMethodFactor(ingredient.cookingMethod)
-    }
-
-    private fun cookingMethodFactor(method: CookingMethod): Float {
-        return when (method) {
-            CookingMethod.Braise -> 1.18f
-            CookingMethod.Roast -> 1.12f
-            CookingMethod.StirFry -> 1.08f
-            CookingMethod.Boil -> 0.95f
-            CookingMethod.ColdDish -> 1.05f
-            CookingMethod.Steam -> 1f
-            CookingMethod.Other -> 1.1f
+    fun saveOrUpdateRecord(onComplete: () -> Unit = {}) {
+        val state = _uiState.value
+        val uri = state.imageUri
+        if (uri.isBlank()) {
+            Log.w(TAG, "保存跳过: URI为空")
+            return
+        }
+        _uiState.update { it.copy(isSaving = true) }
+        viewModelScope.launch {
+            try {
+                val realDishName = cachedRecognitionResult?.dishes?.firstOrNull()?.dishName
+                    ?.takeIf { it.isNotBlank() }
+                    ?: "餐食分析"
+                val json = buildSaveJson(state)
+                val existingId = state.savedFoodRecordId
+                if (existingId != null) {
+                    val updated = FoodRecord(
+                        id = existingId,
+                        imagePath = uri,
+                        recordDate = System.currentTimeMillis(),
+                        dishName = realDishName,
+                        aiJson = json,
+                        status = FoodRecordStatus.COMPLETED,
+                    )
+                    foodRecordRepository.update(updated)
+                    Log.i(TAG, "记录已更新: id=$existingId")
+                } else {
+                    val record = FoodRecord(
+                        imagePath = uri,
+                        recordDate = System.currentTimeMillis(),
+                        dishName = realDishName,
+                        aiJson = json,
+                        status = FoodRecordStatus.COMPLETED,
+                    )
+                    val id = foodRecordRepository.create(record)
+                    _uiState.update { it.copy(savedFoodRecordId = id) }
+                    Log.i(TAG, "记录已创建: id=$id")
+                }
+                _uiState.update { it.copy(isSaving = false) }
+                Toast.makeText(context, "已成功记录至健康档案", Toast.LENGTH_SHORT).show()
+                onComplete()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.e(TAG, "保存失败: ${e.message}", e)
+                _uiState.update { it.copy(isSaving = false) }
+            }
         }
     }
 
     fun resetFlow() {
-        _pendingImageUri.value = null
-        _ingredients.value = emptyList()
-        _recognizedIngredients.value = emptyList()
-        _estimatedSugarGrams.value = 0f
-        _suggestedInsulinUnits.value = 0f
+        cachedRecognitionResult = null
+        _uiState.value = ArchiveDetailUiState()
     }
 
-    fun estimatedCalories(): Int {
-        return _recognizedIngredients.value.sumOf { ingredient ->
-            ingredient.caloriesPer100g * ingredient.portionGrams / 100
+    private suspend fun autoSaveRecord() {
+        val state = _uiState.value
+        val uri = state.imageUri
+        if (uri.isBlank() || state.savedFoodRecordId != null) return
+        try {
+            val realDishName = cachedRecognitionResult?.dishes?.firstOrNull()?.dishName
+                ?.takeIf { it.isNotBlank() }
+                ?: "餐食分析"
+            val json = buildSaveJson(state)
+            val record = FoodRecord(
+                imagePath = uri,
+                recordDate = System.currentTimeMillis(),
+                dishName = realDishName,
+                aiJson = json,
+                status = FoodRecordStatus.COMPLETED,
+            )
+            val id = foodRecordRepository.create(record)
+            _uiState.update { it.copy(savedFoodRecordId = id) }
+            Log.i(TAG, "自动保存完成: id=$id, carb=${state.totalCarbIntake}g")
+        } catch (e: Exception) {
+            Log.e(TAG, "自动保存失败: ${e.message}", e)
         }
     }
 
-    private fun syncLegacyIngredientNames() {
-        _ingredients.value = _recognizedIngredients.value.map { it.name }
+    private fun buildSaveJson(state: ArchiveDetailUiState): String {
+        return gson.toJson(
+            AnalysisResultJson(
+                totalCarbIntake = state.totalCarbIntake,
+                weightedGi = state.weightedGi,
+                meatRatio = state.meatRatio,
+                intakePercent = state.intakePercent,
+                insulinType = state.insulinType.name,
+                bloodSugarStart = state.bloodSugarStart,
+                recognitionResult = cachedRecognitionResult,
+                curvePoints = state.bloodSugarPrediction?.points,
+                insulinBand = state.insulinBand,
+                focusPeriods = state.focusPeriods,
+                reminders = state.reminders,
+            )
+        )
+    }
+
+    private fun debounceRecalculation() {
+        recalcDebounceJob?.cancel()
+        recalcDebounceJob = viewModelScope.launch {
+            delay(250L)
+            runRecalculation()
+        }
+    }
+
+    private suspend fun runRecalculation() {
+        val parsed = cachedRecognitionResult ?: run {
+            Log.w(TAG, "重算跳过: 无缓存识别结果")
+            return
+        }
+        val currentMeatRatio = _uiState.value.meatRatio
+        val currentIntakePercent = _uiState.value.intakePercent
+        val currentBloodSugar = _uiState.value.bloodSugarStart
+        Log.i(TAG, "===== 重算: meatRatio=$currentMeatRatio, intake=$currentIntakePercent, bg=$currentBloodSugar =====")
+        val state = _uiState.value
+        _uiState.update { it.copy(isRecalculating = true) }
+        try {
+            when (val result = analyzeFoodUseCase.recalculate(
+                recognitionResult = parsed,
+                meatRatio = currentMeatRatio,
+                intakePercent = currentIntakePercent,
+                insulinType = state.insulinType,
+                bloodSugarStart = currentBloodSugar,
+            )) {
+                is NetworkResult.Success -> {
+                    Log.i(TAG, "重算完成: carb=${result.data.totalCarbIntake}g, GI=${result.data.weightedGi}")
+                    _uiState.update {
+                        it.copy(isRecalculating = false, error = null,
+                            totalCarbIntake = result.data.totalCarbIntake,
+                            weightedGi = result.data.weightedGi,
+                            bloodSugarPrediction = result.data.bloodSugarPrediction,
+                            insulinBand = result.data.insulinBand,
+                            focusPeriods = result.data.focusPeriods,
+                            reminders = result.data.reminders,
+                            recognitionResult = result.data.recognitionResult,
+                            ingredientCarbsMap = result.data.ingredientCarbsMap,
+                        )
+                    }
+                }
+                is NetworkResult.Error -> {
+                    Log.e(TAG, "重算失败: ${result.message}")
+                    _uiState.update { it.copy(isRecalculating = false, error = result.message) }
+                }
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.e(TAG, "重算异常: ${e.message}", e)
+            _uiState.update { it.copy(isRecalculating = false, error = e.message ?: "重新计算失败") }
+        }
     }
 }
