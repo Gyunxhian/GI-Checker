@@ -9,6 +9,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.diabetesassistant.data.local.DiabetesDatabase
+import com.example.diabetesassistant.data.local.dao.AiChatMessageDao
 import com.example.diabetesassistant.data.local.dao.CookingMethodDao
 import com.example.diabetesassistant.data.local.dao.FoodRecordDao
 import com.example.diabetesassistant.data.local.dao.HealthProfileDao
@@ -66,6 +67,8 @@ object AppModule {
             DiabetesDatabase.MIGRATION_1_2,
             DiabetesDatabase.MIGRATION_2_3,
             DiabetesDatabase.MIGRATION_3_4,
+            DiabetesDatabase.MIGRATION_4_5,
+            DiabetesDatabase.MIGRATION_5_6,
         ).fallbackToDestructiveMigration(true)
             .fallbackToDestructiveMigrationOnDowngrade(true)
             .addCallback(
@@ -107,6 +110,12 @@ object AppModule {
      */
     @Provides
     fun provideUsdaCacheDao(database: DiabetesDatabase): UsdaCacheDao = database.usdaCacheDao()
+
+    /**
+     * 提供 AI 问答记录 DAO。
+     */
+    @Provides
+    fun provideAiChatMessageDao(database: DiabetesDatabase): AiChatMessageDao = database.aiChatMessageDao()
 
     /**
      * 提供 DataStore。

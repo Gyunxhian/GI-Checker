@@ -9,8 +9,9 @@
 .externalNativeBuild
 .cxx
 local.properties
-/Vibe_Coding/架构需求.md
-/Vibe_Coding/error/
+Vibe_Coding/
+/Vibe_Coding/
+*.mp4
 /.claude
 AGENT.md
 技术路线.txt

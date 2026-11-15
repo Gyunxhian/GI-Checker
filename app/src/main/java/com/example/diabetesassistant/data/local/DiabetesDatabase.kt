@@ -5,11 +5,13 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.diabetesassistant.data.local.dao.AiChatMessageDao
 import com.example.diabetesassistant.data.local.dao.CookingMethodDao
 import com.example.diabetesassistant.data.local.dao.FoodRecordDao
 import com.example.diabetesassistant.data.local.dao.HealthProfileDao
 import com.example.diabetesassistant.data.local.dao.UsdaCacheDao
 import com.example.diabetesassistant.data.local.dao.UserDao
+import com.example.diabetesassistant.data.local.entity.AiChatMessage
 import com.example.diabetesassistant.data.local.entity.CookingMethodTable
 import com.example.diabetesassistant.data.local.entity.FoodRecord
 import com.example.diabetesassistant.data.local.entity.HealthProfile
@@ -26,8 +28,9 @@ import com.example.diabetesassistant.data.local.entity.User
         FoodRecord::class,
         CookingMethodTable::class,
         UsdaCache::class,
+        AiChatMessage::class,
     ],
-    version = 4,
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -57,6 +60,11 @@ abstract class DiabetesDatabase : RoomDatabase() {
      */
     abstract fun usdaCacheDao(): UsdaCacheDao
 
+    /**
+     * AI 聊天记录 DAO。
+     */
+    abstract fun aiChatMessageDao(): AiChatMessageDao
+
     companion object {
         /**
          * 数据库文件名。
@@ -76,6 +84,28 @@ abstract class DiabetesDatabase : RoomDatabase() {
                 db.execSQL("DROP TABLE IF EXISTS community_posts")
                 db.execSQL("DROP TABLE IF EXISTS comments")
                 db.execSQL("DROP TABLE IF EXISTS favorites")
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `ai_chat_messages` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `role` TEXT NOT NULL,
+                        `content` TEXT NOT NULL,
+                        `search_sources_json` TEXT NOT NULL,
+                        `timestamp` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `ai_chat_messages` ADD COLUMN `reasoning_content` TEXT NOT NULL DEFAULT ''")
             }
         }
 

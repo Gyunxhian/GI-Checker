@@ -5,7 +5,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+
+/**
+ * 全局深色模式状态 CompositionLocal，供全量组件及色板透明访问
+ */
+val LocalIsDarkTheme = staticCompositionLocalOf { false }
 
 /**
  * 外观模式枚举（三选一，存储于 DataStore）
@@ -87,9 +94,11 @@ fun DiabetesAssistantTheme(
 
     val colorScheme = if (useDark) DarkColorScheme else LightColorScheme
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content,
-    )
+    CompositionLocalProvider(LocalIsDarkTheme provides useDark) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content,
+        )
+    }
 }

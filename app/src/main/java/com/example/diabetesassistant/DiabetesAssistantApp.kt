@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -104,6 +105,7 @@ fun DiabetesAssistantApp(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (showBottomBar) {
                 SplitBottomNavigationBar(
@@ -176,68 +178,73 @@ private fun SplitBottomNavigationBar(
         label = "navSpacerWidth",
     )
 
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(80.dp)
             .background(Color.Transparent)
             .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars)
-            .padding(horizontal = 16.dp)
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        // 主导航胶囊：在首页占满整个导航空间；离开首页时，被弹性展开的相机键挤压压缩空间
         Row(
             modifier = Modifier
-                .weight(3f)
-                .height(68.dp)
-                .shadow(
-                    elevation = 12.dp,
-                    shape = RoundedCornerShape(28.dp),
-                    ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                )
-                .clip(RoundedCornerShape(28.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(28.dp))
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                .fillMaxWidth()
+                .height(68.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            regularDestinations.forEach { destination ->
-                val isSelected = currentDestination == destination
-                val itemWeight by animateFloatAsState(
-                    targetValue = if (isSelected) 1.45f else 1.0f,
-                    animationSpec = springSpecFloat,
-                    label = "itemWeight_${destination.route}",
-                )
-
-                BottomNavPillItem(
-                    destination = destination,
-                    selected = isSelected,
-                    onClick = { navigate(destination) },
-                    modifier = Modifier.weight(itemWeight),
-                )
-            }
-        }
-
-        if (isCameraVisible || cameraWeight > 0.01f) {
-            Spacer(modifier = Modifier.width(spacerWidth))
-
-            Box(
+            // 主导航胶囊：在首页占满整个导航空间；离开首页时，被弹性展开的相机键挤压压缩空间
+            Row(
                 modifier = Modifier
-                    .weight(cameraWeight)
-                    .graphicsLayer {
-                        scaleX = cameraScale
-                        scaleY = cameraScale
-                        alpha = cameraAlpha
-                    },
-                contentAlignment = Alignment.Center,
+                    .weight(3f)
+                    .fillMaxHeight()
+                    .shadow(
+                        elevation = 10.dp,
+                        shape = RoundedCornerShape(28.dp),
+                        ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    )
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(28.dp))
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                CameraNavButton(
-                    selected = currentDestination == MainDestination.Camera,
-                    onClick = { navigate(MainDestination.Camera) },
-                )
+                regularDestinations.forEach { destination ->
+                    val isSelected = currentDestination == destination
+                    val itemWeight by animateFloatAsState(
+                        targetValue = if (isSelected) 1.45f else 1.0f,
+                        animationSpec = springSpecFloat,
+                        label = "itemWeight_${destination.route}",
+                    )
+
+                    BottomNavPillItem(
+                        destination = destination,
+                        selected = isSelected,
+                        onClick = { navigate(destination) },
+                        modifier = Modifier.weight(itemWeight),
+                    )
+                }
+            }
+
+            if (isCameraVisible || cameraWeight > 0.01f) {
+                Spacer(modifier = Modifier.width(spacerWidth))
+
+                Box(
+                    modifier = Modifier
+                        .weight(cameraWeight)
+                        .graphicsLayer {
+                            scaleX = cameraScale
+                            scaleY = cameraScale
+                            alpha = cameraAlpha
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CameraNavButton(
+                        selected = currentDestination == MainDestination.Camera,
+                        onClick = { navigate(MainDestination.Camera) },
+                    )
+                }
             }
         }
     }
@@ -265,7 +272,7 @@ private fun BottomNavPillItem(
     Surface(
         onClick = onClick,
         modifier = modifier.fillMaxHeight(),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(20.dp),
         color = pillBgColor,
         contentColor = contentColor,
     ) {
@@ -279,16 +286,16 @@ private fun BottomNavPillItem(
             Icon(
                 imageVector = destination.icon,
                 contentDescription = stringResource(destination.titleRes),
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(20.dp),
             )
             Spacer(Modifier.height(2.dp))
             Text(
                 text = stringResource(destination.titleRes),
                 fontSize = 11.sp,
-                lineHeight = 13.sp,
+                lineHeight = 15.sp,
                 maxLines = 1,
                 softWrap = false,
-                fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Bold,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             )
         }
     }
@@ -306,11 +313,11 @@ private fun CameraNavButton(
     Surface(
         onClick = onClick,
         modifier = modifier
-            .size(60.dp)
+            .size(56.dp)
             .shadow(
-                elevation = 12.dp,
+                elevation = 10.dp,
                 shape = CircleShape,
-                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.30f),
                 spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
             )
             .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape),

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -79,6 +80,8 @@ import com.example.diabetesassistant.data.local.preferences.UserPreferencesDataS
 import com.example.diabetesassistant.data.model.InsulinType
 import com.example.diabetesassistant.data.repository.FoodRecordRepository
 import com.example.diabetesassistant.data.repository.UserRepository
+import com.example.diabetesassistant.ui.components.AmbientGlowBackground
+import com.example.diabetesassistant.ui.components.GlassCard
 import com.example.diabetesassistant.ui.theme.AppThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -240,22 +243,22 @@ fun LifeScreen(
     val weightKg = state.healthProfile.weightKg ?: 65f
     val bmi = if (heightM > 0f) weightKg / (heightM * heightM) else 22f
 
-    Surface(
+    AmbientGlowBackground(
         modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
     ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 100.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 100.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             // 1. 顶部个人健康档案卡片
             item {
-                Card(
+                GlassCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    shape = RoundedCornerShape(26.dp),
+                    elevation = 6.dp,
                 ) {
                     Column(
                         modifier = Modifier.padding(20.dp),
@@ -402,11 +405,10 @@ fun LifeScreen(
 
             // 2. 偏好与系统设置项
             item {
-                Card(
+                GlassCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    shape = RoundedCornerShape(26.dp),
+                    elevation = 6.dp,
                 ) {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
                         SettingItemRow(

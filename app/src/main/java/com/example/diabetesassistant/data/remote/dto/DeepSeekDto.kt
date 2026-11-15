@@ -7,6 +7,7 @@ data class DeepSeekRequest(
     @SerializedName("messages") val messages: List<DeepSeekMessage>,
     @SerializedName("max_tokens") val maxTokens: Int = 2048,
     @SerializedName("temperature") val temperature: Float = 0.1f,
+    @SerializedName("stream") val stream: Boolean = false,
 )
 
 data class DeepSeekMessage(
@@ -33,6 +34,20 @@ data class DeepSeekChoice(
 )
 
 data class DeepSeekResponseMessage(
+    @SerializedName("content") val content: String? = null,
+    @SerializedName("reasoning_content") val reasoningContent: String? = null,
+)
+
+data class DeepSeekStreamChunk(
+    @SerializedName("choices") val choices: List<DeepSeekStreamChoice> = emptyList(),
+)
+
+data class DeepSeekStreamChoice(
+    @SerializedName("delta") val delta: DeepSeekStreamDelta?,
+    @SerializedName("finish_reason") val finishReason: String? = null,
+)
+
+data class DeepSeekStreamDelta(
     @SerializedName("content") val content: String? = null,
     @SerializedName("reasoning_content") val reasoningContent: String? = null,
 )

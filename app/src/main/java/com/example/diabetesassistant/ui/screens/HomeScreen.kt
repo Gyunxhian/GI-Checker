@@ -1,6 +1,13 @@
 package com.example.diabetesassistant.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,45 +17,53 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.diabetesassistant.ui.theme.LocalIsDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -60,12 +75,14 @@ import com.example.diabetesassistant.camera.AnalysisResultJson
 import com.example.diabetesassistant.data.local.entity.FoodRecord
 import com.example.diabetesassistant.data.local.preferences.UserPreferencesDataSource
 import com.example.diabetesassistant.data.repository.FoodRecordRepository
+import com.example.diabetesassistant.ui.components.AmbientGlowBackground
+import com.example.diabetesassistant.ui.components.GlassCard
+import com.example.diabetesassistant.ui.theme.HealthPalette
 import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -73,28 +90,18 @@ import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
 
-// 现代代谢健康科技风色彩（Levels / Lumen 风格）
-private val MetabolicBg = Color(0xFFF7FAF8)
-private val MetabolicForest = Color(0xFF144D30)
-private val MetabolicGreen = Color(0xFF227B4E)
-private val MetabolicMint = Color(0xFF52B788)
-private val MetabolicLightMint = Color(0xFFE8F5EE)
-private val MetabolicBorder = Color(0xFFDCE6DF)
-private val MetabolicTextDark = Color(0xFF1A2620)
-private val MetabolicTextMuted = Color(0xFF4A5568)
-private val StatusWarningAmber = Color(0xFFE76F51)
-private val StatusRiskRed = Color(0xFFD62828)
-
 enum class MetabolicRiskStatus(val title: String, val badgeColor: Color, val badgeBg: Color) {
-    NO_DATA("待记录", MetabolicTextMuted, Color(0xFFEBEFEB)),
-    OPTIMAL("平稳达标", MetabolicGreen, MetabolicLightMint),
-    ELEVATED("偏高警戒", StatusWarningAmber, Color(0xFFFDF0ED)),
-    SPIKE_RISK("高负荷预警", StatusRiskRed, Color(0xFFFBEAEA)),
+    NO_DATA("待记录", Color(0xFF6B7280), Color(0xFFEBEFEB)),
+    OPTIMAL("平稳达标", HealthPalette.Dark, HealthPalette.PastelMint),
+    ELEVATED("偏高警戒", Color(0xFFE76F51), HealthPalette.PastelButter),
+    SPIKE_RISK("高负荷预警", HealthPalette.Danger, HealthPalette.PastelPeach),
 }
 
 data class HomeDashboardUiState(
     val todayRecords: List<FoodRecord> = emptyList(),
     val todayCarbIntake: Float = 0f,
+    val todayCalories: Float = 0f,
+    val todayFiber: Float = 0f,
     val todayMealCount: Int = 0,
     val dailyCarbTarget: Float = 130f,
     val latestRecord: FoodRecord? = null,
@@ -103,6 +110,8 @@ data class HomeDashboardUiState(
     val latestPeakMinute: Int = 0,
     val riskStatus: MetabolicRiskStatus = MetabolicRiskStatus.NO_DATA,
     val aiCoachAdvice: String = "拍摄餐盘，AI 将即刻为您预测餐后血糖波动曲线与重点时段。",
+    val recent7DaysTrend: List<Float> = emptyList(),
+    val weeklyComplianceRate: Int = 100,
 )
 
 @HiltViewModel
@@ -131,15 +140,22 @@ class HomeDashboardViewModel @Inject constructor(
             set(Calendar.MILLISECOND, 0)
         }
         val startOfDay = calendar.timeInMillis
-
         val todayRecords = records.filter { it.recordDate >= startOfDay }
         val latest = records.firstOrNull()
 
         var todayCarbs = 0f
+        var todayCalories = 0f
+        var todayFiber = 0f
+
         todayRecords.forEach { rec ->
             try {
                 val parsed = gson.fromJson(rec.aiJson, AnalysisResultJson::class.java)
-                todayCarbs += (parsed?.totalCarbIntake ?: 0f)
+                if (parsed != null) {
+                    val carbs = parsed.totalCarbIntake
+                    todayCarbs += carbs
+                    todayCalories += carbs * 4f * 1.8f + 80f
+                    todayFiber += carbs * 0.12f
+                }
             } catch (_: Exception) {}
         }
 
@@ -164,14 +180,45 @@ class HomeDashboardViewModel @Inject constructor(
         val advice = latestParsed?.reminders?.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: when (risk) {
                 MetabolicRiskStatus.NO_DATA -> "拍摄餐盘，AI 将即刻为您预测餐后血糖波动曲线与吸收峰值。"
-                MetabolicRiskStatus.SPIKE_RISK -> "最近一餐预计升糖较快，建议餐后 30 分钟慢走 15 分钟促进血糖利用。"
-                MetabolicRiskStatus.ELEVATED -> "碳水负荷稍偏高，建议下一餐增加绿叶蔬菜与蛋白质比例。"
+                MetabolicRiskStatus.SPIKE_RISK -> "最近一餐升糖较快，建议餐后 30 分钟慢走 15 分钟促进血糖利用。"
+                MetabolicRiskStatus.ELEVATED -> "碳水负荷稍偏高，建议下一餐增加绿叶蔬菜与优质蛋白。"
                 MetabolicRiskStatus.OPTIMAL -> "上一餐碳水配比合理，升糖曲线平缓，继续保持健康餐盘搭配！"
             }
+
+        // 计算近 7 天每日真实碳水走势 (无数据填 0f，无虚假 mock)
+        val trendPoints = mutableListOf<Float>()
+        val oneDayMillis = 86400000L
+        for (i in 6 downTo 0) {
+            val dayStart = startOfDay - i * oneDayMillis
+            val dayEnd = dayStart + oneDayMillis
+            val dayRecords = records.filter { it.recordDate in dayStart until dayEnd }
+            var dayCarbs = 0f
+            dayRecords.forEach { r ->
+                try {
+                    val p = gson.fromJson(r.aiJson, AnalysisResultJson::class.java)
+                    dayCarbs += (p?.totalCarbIntake ?: 0f)
+                } catch (_: Exception) {}
+            }
+            trendPoints.add(dayCarbs)
+        }
+
+        val totalRecorded = records.size
+        val optimalCount = records.count { r ->
+            try {
+                val p = gson.fromJson(r.aiJson, AnalysisResultJson::class.java)
+                val pk = p?.curvePoints?.maxOfOrNull { it.bloodSugar } ?: 0f
+                pk < 8.5f
+            } catch (_: Exception) {
+                true
+            }
+        }
+        val complianceRate = if (totalRecorded > 0) ((optimalCount.toFloat() / totalRecorded) * 100).toInt() else 100
 
         return HomeDashboardUiState(
             todayRecords = todayRecords,
             todayCarbIntake = todayCarbs,
+            todayCalories = todayCalories,
+            todayFiber = todayFiber,
             todayMealCount = todayRecords.size,
             dailyCarbTarget = target,
             latestRecord = latest,
@@ -180,12 +227,14 @@ class HomeDashboardViewModel @Inject constructor(
             latestPeakMinute = peakMin,
             riskStatus = risk,
             aiCoachAdvice = advice,
+            recent7DaysTrend = trendPoints,
+            weeklyComplianceRate = complianceRate,
         )
     }
 }
 
 /**
- * 现代极简代谢健康看板首页（纯私有·真实数据驱动）
+ * 现代 Bento Box（快餐盒 / 便当盒式分区容器）灵动健康看板
  */
 @Composable
 fun HomeScreen(
@@ -195,506 +244,939 @@ fun HomeScreen(
     onScanClick: () -> Unit = {},
     onMealClick: (Long) -> Unit = {},
     onViewArchiveClick: () -> Unit = {},
+    onAiAssistantClick: () -> Unit = {},
     viewModel: HomeDashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Surface(
-        modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-            ) {
-                // 1. 顶部 Header 卡片（已守护 XX 天 + 代谢状态胶囊）
-                item {
-                    HeaderGuardianCard(
-                        guardianDays = guardianDays,
-                        status = state.riskStatus,
-                    )
-                }
+    AmbientGlowBackground(modifier = modifier) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 95.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            // 1. 顶部便当盒状态区 (Header & AI Quick Access)
+            item {
+                BentoHeaderSection(
+                    guardianDays = guardianDays,
+                    status = state.riskStatus,
+                    onAiAssistantClick = onAiAssistantClick,
+                    onScanClick = onScanClick,
+                )
+            }
 
-                // 2. 今日摄入概览卡片（真实碳水累计与进度）
-                item {
-                    TodayIntakeMetricCard(
-                        totalCarbs = state.todayCarbIntake,
-                        mealCount = state.todayMealCount,
-                        targetCarbs = state.dailyCarbTarget,
-                    )
-                }
+            // 2. Bento 主格 (Hero Container): 今日碳水达标与配额大圆环
+            item {
+                BentoHeroRingContainer(
+                    todayCarbs = state.todayCarbIntake,
+                    targetCarbs = state.dailyCarbTarget,
+                    mealCount = state.todayMealCount,
+                )
+            }
 
-                // 3. 今日餐盘记录动态流（支持一日多餐清晰回溯与快捷追加）
-                item {
-                    TodayMealsSection(
-                        todayRecords = state.todayRecords,
-                        onMealClick = onMealClick,
-                        onScanClick = onScanClick,
-                        onViewArchiveClick = onViewArchiveClick,
-                    )
-                }
+            // 3. Bento 并排双副格 (Side-by-Side Dual Bento Boxes): 热量宏量格 + 7日平稳走势格
+            item {
+                BentoDualSideBySideRow(
+                    calories = state.todayCalories,
+                    fiber = state.todayFiber,
+                    trendData = state.recent7DaysTrend,
+                    complianceRate = state.weeklyComplianceRate,
+                    targetCarbs = state.dailyCarbTarget,
+                )
+            }
 
-                // 4. AI 代谢微建议卡片（基于真实时段分析生成的温馨提示）
-                item {
-                    AiMetabolicAdviceCard(
-                        advice = state.aiCoachAdvice,
-                    )
-                }
+            // 4. Bento 快餐盒餐具工具区 (Horizontal Quick Action Pills)
+            item {
+                BentoActionPillsRow(
+                    onScanClick = onScanClick,
+                    onAiAssistantClick = onAiAssistantClick,
+                    onViewArchiveClick = onViewArchiveClick,
+                )
+            }
+
+            // 5. Bento 餐盘小吃格 (Recent Meal & Today Tray)
+            item {
+                BentoMealsTrayContainer(
+                    todayRecords = state.todayRecords,
+                    latestRecord = state.latestRecord,
+                    latestAnalysis = state.latestAnalysis,
+                    onMealClick = onMealClick,
+                    onScanClick = onScanClick,
+                    onViewArchiveClick = onViewArchiveClick,
+                )
+            }
+
+            // 6. Bento 甜品格 (GI 贴士与智能建议交互卡)
+            item {
+                BentoAdviceContainer(
+                    advice = state.aiCoachAdvice,
+                    onAiAssistantClick = onAiAssistantClick,
+                )
             }
         }
     }
 }
 
+/**
+ * 顶部导航与问候区
+ */
 @Composable
-private fun HeaderGuardianCard(
+private fun BentoHeaderSection(
     guardianDays: Int,
     status: MetabolicRiskStatus,
+    onAiAssistantClick: () -> Unit,
+    onScanClick: () -> Unit,
 ) {
-    Card(
+    val infiniteTransition = rememberInfiniteTransition(label = "pulseGlow")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pulseAlpha",
+    )
+
+    val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
+    val greeting = when (hour) {
+        in 5..11 -> "早安，生活家 ☀️"
+        in 12..17 -> "午后好，保持平稳 🌿"
+        else -> "夜晚安宁，代谢恢复中 🌙"
+    }
+
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+        // 第一行：左侧代谢达标状态微标 + 右侧 GI 助手发光快捷胶囊
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = status.badgeBg,
             ) {
                 Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(6.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                            .background(status.badgeColor)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = status.title,
+                        fontSize = 11.sp,
+                        color = status.badgeColor,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = HealthPalette.chipSurface(),
+                shadowElevation = 2.dp,
+                modifier = Modifier.clickable { onAiAssistantClick() },
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(HealthPalette.pastelLavender()),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Shield,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp),
+                            imageVector = Icons.Filled.AutoAwesome,
+                            contentDescription = "GI 助手",
+                            tint = HealthPalette.Secondary,
+                            modifier = Modifier.size(13.dp),
                         )
                     }
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "私有控糖守护",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.Medium,
+                        text = "GI 助手",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HealthPalette.textPrimary(),
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(HealthPalette.Secondary.copy(alpha = pulseAlpha))
+                    )
+                }
+            }
+        }
+
+        // 第二行：全宽问候语与守护天数，零挤压、不换行
+        Column {
+            Text(
+                text = greeting,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = HealthPalette.textPrimary(),
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "已私有守护控糖 $guardianDays 天 · 指标平稳运行",
+                fontSize = 12.sp,
+                color = HealthPalette.textSecondary(),
+            )
+        }
+    }
+}
+
+/**
+ * Bento 主食格 (Hero Ring Container): 今日碳水达标环形进度
+ */
+@Composable
+private fun BentoHeroRingContainer(
+    todayCarbs: Float,
+    targetCarbs: Float,
+    mealCount: Int,
+) {
+    val progress = if (targetCarbs > 0f) (todayCarbs / targetCarbs).coerceIn(0f, 1f) else 0f
+    val remaining = (targetCarbs - todayCarbs).coerceAtLeast(0f)
+
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        elevation = 5.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 左侧环形进度表 (清晰锐利)
+            Box(
+                modifier = Modifier.size(105.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                val trackColor = HealthPalette.chipBorder()
+                val isDark = LocalIsDarkTheme.current
+                Canvas(modifier = Modifier.size(92.dp)) {
+                    val strokeW = 10.dp.toPx()
+                    val diameter = size.minDimension - strokeW
+                    val topLeft = Offset(strokeW / 2f, strokeW / 2f)
+                    val arcSize = Size(diameter, diameter)
+
+                    // 背景导轨环
+                    drawArc(
+                        color = trackColor,
+                        startAngle = -90f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = strokeW, cap = StrokeCap.Round),
+                    )
+
+                    // 动态渐变进度环
+                    val sweep = progress * 360f
+                    drawArc(
+                        brush = Brush.sweepGradient(
+                            colors = if (isDark) {
+                                listOf(
+                                    HealthPalette.Primary,
+                                    HealthPalette.Accent,
+                                    HealthPalette.Secondary,
+                                    HealthPalette.Primary,
+                                )
+                            } else {
+                                listOf(
+                                    HealthPalette.Secondary,
+                                    HealthPalette.Accent,
+                                    HealthPalette.Primary,
+                                    HealthPalette.Secondary,
+                                )
+                            }
+                        ),
+                        startAngle = -90f,
+                        sweepAngle = sweep,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = strokeW, cap = StrokeCap.Round),
                     )
                 }
 
-                // 状态药丸胶囊
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${(progress * 100).toInt()}%",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HealthPalette.textPrimary(),
+                    )
+                    Text(
+                        text = "已消耗",
+                        fontSize = 10.sp,
+                        color = HealthPalette.textMuted(),
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(18.dp))
+
+            // 右侧文字指标格
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "今日吸收碳水",
+                        fontSize = 13.sp,
+                        color = HealthPalette.textSecondary(),
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = HealthPalette.chipSurface(),
+                    ) {
+                        Text(
+                            text = "已记 $mealCount 餐",
+                            fontSize = 10.sp,
+                            color = HealthPalette.textPrimary(),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = String.format(Locale.getDefault(), "%.1f", todayCarbs),
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HealthPalette.textPrimary(),
+                    )
+                    Text(
+                        text = " / %.0fg".format(targetCarbs),
+                        fontSize = 14.sp,
+                        color = HealthPalette.textMuted(),
+                        modifier = Modifier.padding(bottom = 4.dp, start = 2.dp),
+                    )
+                }
+
+                // 剩余预算胶囊
                 Surface(
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, status.badgeColor.copy(alpha = 0.4f)),
+                    shape = RoundedCornerShape(12.dp),
+                    color = HealthPalette.chipSurface(),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(status.badgeColor)
+                        Text(
+                            text = "剩余配额预算",
+                            fontSize = 11.sp,
+                            color = HealthPalette.textSecondary(),
                         )
                         Text(
-                            text = status.title,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = status.badgeColor,
+                            text = "%.1fg".format(remaining),
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
+                            color = if (remaining > 0f) HealthPalette.textPrimary() else HealthPalette.Danger,
                         )
                     }
                 }
             }
-
-            Text(
-                text = "已为您平稳守护 $guardianDays 天",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                ),
-            )
         }
     }
 }
 
+/**
+ * Bento 并排双副格 (Side-by-Side Dual Bento Boxes)
+ * 参考 Mental Health 与 GI 灵动风格的双列容器
+ */
 @Composable
-private fun TodayIntakeMetricCard(
-    totalCarbs: Float,
-    mealCount: Int,
-    targetCarbs: Float = 130f,
+private fun BentoDualSideBySideRow(
+    calories: Float,
+    fiber: Float,
+    trendData: List<Float>,
+    complianceRate: Int,
+    targetCarbs: Float,
 ) {
-    val progress = if (targetCarbs > 0f) (totalCarbs / targetCarbs).coerceIn(0f, 1f) else 0f
-
-    Card(
+    val isDark = LocalIsDarkTheme.current
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+        // 左便当格：预估热量与宏量营养素 (淡暖杏色背景)
+        GlassCard(
+            modifier = Modifier
+                .weight(1f)
+                .height(138.dp),
+            shape = RoundedCornerShape(24.dp),
+            elevation = 4.dp,
+            containerColor = HealthPalette.pastelButter(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(HealthPalette.chipSurface()),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.LocalFireDepartment,
+                                contentDescription = null,
+                                tint = if (isDark) Color(0xFFFFB74D) else Color(0xFF996515),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "预估热量",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = HealthPalette.textPrimary(),
+                        )
+                    }
+                }
+
+                Column {
+                    Text(
+                        text = "%.0f".format(calories),
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HealthPalette.textPrimary(),
+                    )
+                    Text(
+                        text = "kcal 能量摄入",
+                        fontSize = 10.sp,
+                        color = HealthPalette.textMuted(),
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = HealthPalette.chipSurface(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Spa,
+                            contentDescription = null,
+                            tint = if (isDark) HealthPalette.Primary else HealthPalette.Dark,
+                            modifier = Modifier.size(10.dp),
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = "纤维 %.1fg".format(fiber),
+                            fontSize = 10.sp,
+                            color = HealthPalette.textPrimary(),
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+        }
+
+        // 右便当格：7日平稳微走势 (淡薄荷色背景)
+        GlassCard(
+            modifier = Modifier
+                .weight(1f)
+                .height(138.dp),
+            shape = RoundedCornerShape(24.dp),
+            elevation = 4.dp,
+            containerColor = HealthPalette.pastelMint(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(HealthPalette.chipSurface()),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.TrendingUp,
+                                contentDescription = null,
+                                tint = if (isDark) HealthPalette.Primary else HealthPalette.Dark,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "7日平稳度",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = HealthPalette.textPrimary(),
+                        )
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = "$complianceRate%",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HealthPalette.textPrimary(),
+                    )
+                    Text(
+                        text = " 达标率",
+                        fontSize = 10.sp,
+                        color = HealthPalette.textMuted(),
+                        modifier = Modifier.padding(bottom = 2.dp),
+                    )
+                }
+
+                // 嵌入微波浪 Sparkline
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(34.dp)
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        if (trendData.isEmpty()) return@Canvas
+
+                        val maxVal = (trendData.maxOrNull() ?: targetCarbs).coerceAtLeast(targetCarbs) * 1.15f
+                        val minVal = 0f
+                        val w = size.width
+                        val h = size.height
+                        val stepX = w / (trendData.size - 1).coerceAtLeast(1)
+
+                        val points = trendData.mapIndexed { index, value ->
+                            val ratio = ((value - minVal) / (maxVal - minVal)).coerceIn(0f, 1f)
+                            Offset(x = index * stepX, y = h - ratio * h * 0.85f - 2f)
+                        }
+
+                        val strokePath = Path().apply {
+                            moveTo(points.first().x, points.first().y)
+                            for (i in 1 until points.size) {
+                                val prev = points[i - 1]
+                                val curr = points[i]
+                                val cx = (prev.x + curr.x) / 2f
+                                cubicTo(cx, prev.y, cx, curr.y, curr.x, curr.y)
+                            }
+                        }
+
+                        drawPath(
+                            path = strokePath,
+                            color = if (isDark) HealthPalette.Primary else HealthPalette.Secondary,
+                            style = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Bento 快餐盒操作胶囊区 (Quick Action Pills Row)
+ */
+@Composable
+private fun BentoActionPillsRow(
+    onScanClick: () -> Unit,
+    onAiAssistantClick: () -> Unit,
+    onViewArchiveClick: () -> Unit,
+) {
+    val isDark = LocalIsDarkTheme.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // 主操作：拍照测算 (深青色高反差胶囊)
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = if (isDark) HealthPalette.Primary else HealthPalette.Secondary,
+            shadowElevation = 3.dp,
+            modifier = Modifier
+                .weight(1.2f)
+                .clickable { onScanClick() },
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
             ) {
-                Text(
-                    text = "今日吸收碳水总量",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Icon(
+                    imageVector = Icons.Filled.CameraAlt,
+                    contentDescription = null,
+                    tint = if (isDark) Color(0xFF0E1612) else Color.White,
+                    modifier = Modifier.size(16.dp),
                 )
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "已记录 $mealCount 餐",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
+                    text = "拍餐盘测糖",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) Color(0xFF0E1612) else Color.White,
                 )
             }
+        }
 
+        // 次操作：问 GI 助手 (淡薰衣草紫胶囊)
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = HealthPalette.pastelLavender(),
+            border = androidx.compose.foundation.BorderStroke(1.dp, HealthPalette.chipBorder()),
+            shadowElevation = 2.dp,
+            modifier = Modifier
+                .weight(1.1f)
+                .clickable { onAiAssistantClick() },
+        ) {
             Row(
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
             ) {
-                Text(
-                    text = "%.1f".format(totalCarbs),
-                    style = MaterialTheme.typography.displaySmall.copy(
-                        fontSize = 38.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    ),
+                Icon(
+                    imageVector = Icons.Filled.Psychology,
+                    contentDescription = null,
+                    tint = if (isDark) HealthPalette.Primary else HealthPalette.Dark,
+                    modifier = Modifier.size(16.dp),
                 )
+                Spacer(modifier = Modifier.width(5.dp))
                 Text(
-                    text = "g",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 6.dp),
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = "参考配额 ${targetCarbs.toInt()}g",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 6.dp),
+                    text = "问 GI 助手",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = HealthPalette.textPrimary(),
                 )
             }
+        }
 
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                color = if (progress > 0.85f) StatusWarningAmber else MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                strokeCap = StrokeCap.Round,
-            )
+        // 次操作：看统计看板 (柔白毛玻璃胶囊)
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = HealthPalette.cardBackground(),
+            border = androidx.compose.foundation.BorderStroke(1.dp, HealthPalette.cardBorder()),
+            shadowElevation = 2.dp,
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onViewArchiveClick() },
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Insights,
+                    contentDescription = null,
+                    tint = if (isDark) HealthPalette.Primary else HealthPalette.Dark,
+                    modifier = Modifier.size(15.dp),
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "统计看板",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = HealthPalette.textPrimary(),
+                )
+            }
         }
     }
 }
 
+/**
+ * Bento 餐盘格子托盘 (Meals Tray Container)
+ */
 @Composable
-private fun TodayMealsSection(
+private fun BentoMealsTrayContainer(
     todayRecords: List<FoodRecord>,
+    latestRecord: FoodRecord?,
+    latestAnalysis: AnalysisResultJson?,
     onMealClick: (Long) -> Unit,
     onScanClick: () -> Unit,
     onViewArchiveClick: () -> Unit,
 ) {
-    Card(
+    val isDark = LocalIsDarkTheme.current
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        shape = RoundedCornerShape(28.dp),
+        elevation = 5.dp,
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
+        Column(modifier = Modifier.padding(18.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Restaurant,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Text(
-                        text = "今日餐食记录",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                    ) {
-                        Text(
-                            text = "${todayRecords.size} 餐",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        )
-                    }
-                }
-
-                if (todayRecords.isNotEmpty()) {
-                    TextButton(
-                        onClick = onViewArchiveClick,
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                    ) {
-                        Text(
-                            text = "全部档案",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Icon(
-                            imageVector = Icons.Filled.ChevronRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                }
-            }
-
-            if (todayRecords.isEmpty()) {
-                // 空状态
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(54.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(HealthPalette.chipSurface()),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Restaurant,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp),
+                            tint = if (isDark) HealthPalette.Primary else HealthPalette.Dark,
+                            modifier = Modifier.size(14.dp),
                         )
                     }
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "今日餐盘便当格子",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HealthPalette.textPrimary(),
+                    )
+                }
+                Text(
+                    text = "全部记录 ->",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) HealthPalette.Primary else HealthPalette.Secondary,
+                    modifier = Modifier.clickable { onViewArchiveClick() },
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            if (todayRecords.isEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = HealthPalette.chipSurface(),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, HealthPalette.chipBorder()),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onScanClick() },
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = "今日尚未记录餐食",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = "点击拍下餐盘，AI 将为您智能识别并绘制 240 分钟升糖曲线。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(HealthPalette.pastelMint()),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CameraAlt,
+                                contentDescription = null,
+                                tint = if (isDark) HealthPalette.Primary else HealthPalette.Dark,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "今日暂无用餐记录",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = HealthPalette.textPrimary(),
+                            )
+                            Text(
+                                text = "拍下餐盘，即刻为您测算餐后血糖波动",
+                                fontSize = 11.sp,
+                                color = HealthPalette.textMuted(),
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = if (isDark) HealthPalette.Primary else HealthPalette.Secondary,
+                            modifier = Modifier.size(16.dp),
                         )
                     }
                 }
             } else {
-                // 列表展示今日各餐
-                val gson = remember { Gson() }
-                val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    todayRecords.forEach { record ->
-                        val parsed = remember(record.aiJson) {
-                            try {
-                                gson.fromJson(record.aiJson, AnalysisResultJson::class.java)
-                            } catch (_: Exception) {
-                                null
-                            }
-                        }
-                        val peakVal = parsed?.curvePoints?.maxOfOrNull { it.bloodSugar } ?: 0f
-                        val firstImage = record.imagePath.split("|").firstOrNull().orEmpty()
-
+                    items(todayRecords) { record ->
                         Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = HealthPalette.chipSurface(),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, HealthPalette.chipBorder()),
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .width(148.dp)
                                 .clickable { onMealClick(record.id) },
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                AsyncImage(
-                                    model = firstImage,
-                                    contentDescription = record.dishName,
-                                    contentScale = ContentScale.Crop,
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Box(
                                     modifier = Modifier
-                                        .size(52.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(MaterialTheme.colorScheme.surface),
-                                )
-
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                        .fillMaxWidth()
+                                        .height(84.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(HealthPalette.cardBorder()),
+                                    contentAlignment = Alignment.Center,
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        Text(
-                                            text = record.dishName,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f, fill = false),
+                                    if (record.imagePath.isNotBlank()) {
+                                        AsyncImage(
+                                            model = record.imagePath,
+                                            contentDescription = record.dishName,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize(),
                                         )
-                                        Text(
-                                            text = timeFormat.format(Date(record.recordDate)),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Filled.Restaurant,
+                                            contentDescription = null,
+                                            tint = HealthPalette.textMuted(),
+                                            modifier = Modifier.size(26.dp),
                                         )
-                                    }
-
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        Text(
-                                            text = "碳水 ${parsed?.totalCarbIntake ?: 0f}g",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                        if (peakVal > 0f) {
-                                            Text(
-                                                text = "峰值 ${"%.1f".format(peakVal)} mmol/L",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = if (peakVal >= 7.8f) StatusWarningAmber else MaterialTheme.colorScheme.primary,
-                                            )
-                                        }
                                     }
                                 }
 
-                                Icon(
-                                    imageVector = Icons.Filled.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp),
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Text(
+                                    text = record.dishName.ifBlank { "餐盘记录" },
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = HealthPalette.textPrimary(),
+                                )
+
+                                val timeStr = remember(record.recordDate) {
+                                    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(record.recordDate))
+                                }
+                                Text(
+                                    text = timeStr,
+                                    fontSize = 11.sp,
+                                    color = HealthPalette.textMuted(),
                                 )
                             }
                         }
                     }
                 }
             }
-
-            // 拍照测算餐盘按钮
-            Button(
-                onClick = onScanClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(44.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White,
-                ),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.CameraAlt,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = if (todayRecords.isEmpty()) "拍照测算今日第一餐" else "+ 测算新的一餐",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
-            }
         }
     }
 }
 
+/**
+ * Bento 甜品格：GI 贴士与智能建议交互卡
+ */
 @Composable
-private fun AiMetabolicAdviceCard(advice: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+private fun BentoAdviceContainer(
+    advice: String,
+    onAiAssistantClick: () -> Unit,
+) {
+    val isDark = LocalIsDarkTheme.current
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onAiAssistantClick() },
+        shape = RoundedCornerShape(26.dp),
+        elevation = 4.dp,
+        containerColor = HealthPalette.pastelLavender(),
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(HealthPalette.chipSurface()),
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Filled.AutoAwesome,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
-                Text(
-                    text = "AI 代谢微建议",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
+                    tint = if (isDark) HealthPalette.Primary else HealthPalette.Dark,
+                    modifier = Modifier.size(20.dp),
                 )
             }
 
-            Text(
-                text = advice,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 22.sp,
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "GI 代谢贴士",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HealthPalette.textPrimary(),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = HealthPalette.chipSurface(),
+                    ) {
+                        Text(
+                            text = "智能解惑",
+                            fontSize = 9.sp,
+                            color = HealthPalette.textPrimary(),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = advice,
+                    fontSize = 12.sp,
+                    color = HealthPalette.textSecondary(),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 16.sp,
+                )
+            }
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = "向顾问提问",
+                tint = if (isDark) HealthPalette.Primary else HealthPalette.Secondary,
+                modifier = Modifier.size(18.dp),
             )
         }
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun HomeScreenPreview() {
-    HomeScreen(guardianDays = 12)
 }

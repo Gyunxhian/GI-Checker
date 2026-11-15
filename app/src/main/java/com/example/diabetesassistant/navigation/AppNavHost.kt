@@ -13,6 +13,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.diabetesassistant.camera.ArchiveDetailScreen
 import com.example.diabetesassistant.camera.CameraRecognitionViewModel
+import com.example.diabetesassistant.ui.screens.AiAssistantScreen
 import com.example.diabetesassistant.ui.screens.ArchiveScreen
 import com.example.diabetesassistant.ui.screens.CameraScreen
 import com.example.diabetesassistant.ui.screens.HomeScreen
@@ -45,6 +46,9 @@ fun AppNavHost(
                     navController.navigate(MainDestination.Archive.route) {
                         launchSingleTop = true
                     }
+                },
+                onAiAssistantClick = {
+                    navController.navigate(ArchiveSecondaryRoute.AiAssistant)
                 },
             )
         }
@@ -125,6 +129,15 @@ fun AppNavHost(
                         }
                         launchSingleTop = true
                     }
+                }
+            )
+        }
+
+        // 6. GI AI 专属健康助手 (沉浸式问答会话)
+        composable(ArchiveSecondaryRoute.AiAssistant) {
+            AiAssistantScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
                 }
             )
         }
