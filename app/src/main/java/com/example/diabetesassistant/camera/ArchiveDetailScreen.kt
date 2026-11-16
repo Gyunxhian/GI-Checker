@@ -82,6 +82,7 @@ import com.example.diabetesassistant.domain.algorithm.BloodSugarPoint
 import com.example.diabetesassistant.domain.algorithm.FocusLevel
 import com.example.diabetesassistant.domain.algorithm.FocusPeriod
 import com.example.diabetesassistant.domain.algorithm.InsulinBandResult
+import com.example.diabetesassistant.ui.theme.HealthPalette
 
 private val BandBlue = Color(0xFF4A90E2)
 private val BandGreen = Color(0xFF27AE60)
@@ -970,18 +971,16 @@ private fun IngredientsBreakdownCard(
                         fontWeight = FontWeight.Bold,
                     )
                 }
-                if (recognitionResult.coinDetected) {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                    ) {
-                        Text(
-                            text = "硬币标尺已校准",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
-                    }
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = HealthPalette.pastelMint(),
+                ) {
+                    Text(
+                        text = "智能分量估算",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = HealthPalette.Dark,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
                 }
             }
 

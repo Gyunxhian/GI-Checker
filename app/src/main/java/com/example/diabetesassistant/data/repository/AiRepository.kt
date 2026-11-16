@@ -86,7 +86,7 @@ class AiRepositoryImpl @Inject constructor(
                 messages = listOf(
                     DeepSeekMessage(role = "user", content = contentParts),
                 ),
-                maxTokens = 2048,
+                maxTokens = 4096,
                 temperature = 0.1f,
             )
             Log.d(TAG, "发送DeepSeek-flash视觉识别请求 (包含 ${imageUrls.size} 张图片)...")
@@ -97,15 +97,32 @@ class AiRepositoryImpl @Inject constructor(
             )
             Log.d(TAG, "DeepSeek响应收到 — choices数量: ${response.choices.size}")
 
-            val text = response.choices.firstOrNull()?.message?.content
-            if (text.isNullOrBlank()) {
-                Log.w(TAG, "DeepSeek返回空内容")
+            val choiceMsg = response.choices.firstOrNull()?.message
+            val contentText = choiceMsg?.content?.trim()
+            val reasoningText = choiceMsg?.reasoningContent?.trim()
+
+            val rawText = if (!contentText.isNullOrBlank()) {
+                contentText
+            } else if (!reasoningText.isNullOrBlank()) {
+                Log.w(TAG, "DeepSeek message.content 为空，尝试从 reasoning_content 提取合法 JSON")
+                reasoningText
+            } else {
+                ""
+            }
+
+            if (rawText.isBlank()) {
+                Log.w(TAG, "DeepSeek返回空内容 (content与reasoning_content均为空)")
                 NetworkResult.Error(message = "DeepSeek returned empty content.")
             } else {
-                val extracted = extractJson(text)
-                Log.d(TAG, "DeepSeek识别成功 — 原始文本长度: ${text.length}, 提取JSON长度: ${extracted.length}")
-                Log.d(TAG, "识别JSON: $extracted")
-                NetworkResult.Success(extracted)
+                val extracted = extractJson(rawText)
+                if (extracted.startsWith("{") && extracted.endsWith("}")) {
+                    Log.d(TAG, "DeepSeek识别成功 — 原始文本长度: ${rawText.length}, 提取JSON长度: ${extracted.length}")
+                    Log.d(TAG, "识别JSON: $extracted")
+                    NetworkResult.Success(extracted)
+                } else {
+                    Log.e(TAG, "未能从响应中提取合法JSON结构: $rawText")
+                    NetworkResult.Error(message = "Failed to extract valid JSON from DeepSeek response.")
+                }
             }
         } catch (exception: HttpException) {
             val errorBody = exception.response()?.errorBody()?.string() ?: ""
@@ -134,7 +151,7 @@ class AiRepositoryImpl @Inject constructor(
             val request = DeepSeekRequest(
                 model = "deepseek-flash",
                 messages = messages,
-                maxTokens = 2048,
+                maxTokens = 4096,
             )
             Log.d(TAG, "发送DeepSeek提醒请求 — prompt长度: ${prompt.length}")
 
@@ -206,7 +223,7 @@ class AiRepositoryImpl @Inject constructor(
             val request = DeepSeekRequest(
                 model = "deepseek-chat",
                 messages = messages,
-                maxTokens = 2048,
+                maxTokens = 4096,
                 temperature = 0.3f,
             )
 

@@ -5,7 +5,7 @@ import com.google.gson.annotations.SerializedName
 data class DeepSeekRequest(
     @SerializedName("model") val model: String = "deepseek-flash",
     @SerializedName("messages") val messages: List<DeepSeekMessage>,
-    @SerializedName("max_tokens") val maxTokens: Int = 2048,
+    @SerializedName("max_tokens") val maxTokens: Int = 4096,
     @SerializedName("temperature") val temperature: Float = 0.1f,
     @SerializedName("stream") val stream: Boolean = false,
 )

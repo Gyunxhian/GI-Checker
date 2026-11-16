@@ -79,22 +79,23 @@ class AnalyzeFoodUseCase @Inject constructor(
         bloodSugarStart: Float = AlgorithmConstants.DEFAULT_BLOOD_SUGAR_START,
     ): NetworkResult<AnalyzeFoodResult> {
         val prompt = """
-            你是一位专业的糖尿病营养与代谢专家。请细致分析用户提供的餐盘图片（可能包含一道或多道菜品、汤品与主食）。
-            请严格输出合法的 JSON，禁止包含任何思考标签或 Markdown 文本。
+            你是一位专业的糖尿病营养与代谢专家。请直接分析用户提供的餐盘图片中的所有菜品、汤品与主食。
+            【重要原则】：无需寻找或参考硬币等外置标尺，请直接根据画面中常见餐具、碗盘、蒸笼容器的视觉比例与饱满度，直接判断估算分量。
+            思考过程必须极度精简（50字内迅速确定菜品与分量），思考完成后立即输出合法的标准 JSON，严禁输出任何 Markdown 格式包裹（如 ```json）或说明文字。
             
             输出规范与要求：
-            1. 图中可能包含硬币或餐盘边缘作为尺寸参照物，请据此合理估算每道菜与食材的真实重量（克）。
-            2. 所有菜品名称与食材名称必须全部使用标准【中文】。
+            1. 分量判断：直接依据餐具视觉比例，合理估算每道菜与食材的净重（克）。
+            2. 语言规范：所有菜品名称与食材名称必须全部使用标准【中文】。
             3. 每个食材项必须包含：
                - name: 中文食材名（例如：“西红柿”、“鸡蛋”、“米饭”、“瘦猪肉”、“西兰花”）
                - name_en: 对应 USDA 营养库英文检索词（例如：“tomato”、“egg”、“rice”、“pork”、“broccoli”）
                - category: 分类（仅限："荤" 或 "素"）
-               - weight_g: 估算克重数值
+               - weight_g: 估算克重数值（整数或浮点数）
                - cooking_method: 烹饪方式（仅限中文："炒", "蒸", "煮", "红烧", "爆炒", "油炸", "凉拌", "烤", "煲汤", "白灼", "生食"）
                - gi_value: 升糖指数预估值（0-100 数值）
             4. 最多识别 6 道菜品或主食组合。
             5. 输出格式：
-               {"dishes":[{"dish_name":"中文菜名","ingredients":[{"name":"西红柿","name_en":"tomato","category":"素","weight_g":150,"cooking_method":"炒","gi_value":30}]}],"coin_detected":true}
+               {"dishes":[{"dish_name":"中文菜名","ingredients":[{"name":"西红柿","name_en":"tomato","category":"素","weight_g":150,"cooking_method":"炒","gi_value":30}]}]}
         """.trimIndent()
 
         Log.d(TAG, "===== Step 0: AI图像识别 (${imageUrls.size} 张图片) =====")
