@@ -49,6 +49,7 @@ data class ArchiveDetailUiState(
     val bloodSugarStart: Float = 5.0f,
     val insulinType: InsulinType = InsulinType.RAPID,
     val savedFoodRecordId: Long? = null,
+    val recordDate: Long? = null,
     val recognitionResult: DishRecognitionResult? = null,
     val ingredientCarbsMap: Map<String, Float> = emptyMap(),
 )
@@ -193,6 +194,7 @@ class CameraRecognitionViewModel @Inject constructor(
                         imageUri = record.imagePath,
                         stagedImages = staged,
                         savedFoodRecordId = record.id,
+                        recordDate = record.recordDate,
                         totalCarbIntake = parsed?.totalCarbIntake ?: 0f,
                         weightedGi = parsed?.weightedGi ?: 0f,
                         meatRatio = parsed?.meatRatio ?: 0.5f,
@@ -245,27 +247,32 @@ class CameraRecognitionViewModel @Inject constructor(
                 val json = buildSaveJson(state)
                 val existingId = state.savedFoodRecordId
                 if (existingId != null) {
+                    val originalDate = state.recordDate
+                        ?: foodRecordRepository.getById(existingId)?.recordDate
+                        ?: System.currentTimeMillis()
                     val updated = FoodRecord(
                         id = existingId,
                         imagePath = uri,
-                        recordDate = System.currentTimeMillis(),
+                        recordDate = originalDate,
                         dishName = realDishName,
                         aiJson = json,
                         status = FoodRecordStatus.COMPLETED,
                     )
                     foodRecordRepository.update(updated)
-                    Log.i(TAG, "记录已更新: id=$existingId")
+                    _uiState.update { it.copy(recordDate = originalDate) }
+                    Log.i(TAG, "记录已更新(保留原始时间戳): id=$existingId, recordDate=$originalDate")
                 } else {
+                    val now = System.currentTimeMillis()
                     val record = FoodRecord(
                         imagePath = uri,
-                        recordDate = System.currentTimeMillis(),
+                        recordDate = now,
                         dishName = realDishName,
                         aiJson = json,
                         status = FoodRecordStatus.COMPLETED,
                     )
                     val id = foodRecordRepository.create(record)
-                    _uiState.update { it.copy(savedFoodRecordId = id) }
-                    Log.i(TAG, "记录已创建: id=$id")
+                    _uiState.update { it.copy(savedFoodRecordId = id, recordDate = now) }
+                    Log.i(TAG, "记录已创建: id=$id, recordDate=$now")
                 }
                 _uiState.update { it.copy(isSaving = false) }
                 Toast.makeText(context, "已成功记录至健康档案", Toast.LENGTH_SHORT).show()
@@ -292,16 +299,17 @@ class CameraRecognitionViewModel @Inject constructor(
                 ?.takeIf { it.isNotBlank() }
                 ?: "餐食分析"
             val json = buildSaveJson(state)
+            val now = System.currentTimeMillis()
             val record = FoodRecord(
                 imagePath = uri,
-                recordDate = System.currentTimeMillis(),
+                recordDate = now,
                 dishName = realDishName,
                 aiJson = json,
                 status = FoodRecordStatus.COMPLETED,
             )
             val id = foodRecordRepository.create(record)
-            _uiState.update { it.copy(savedFoodRecordId = id) }
-            Log.i(TAG, "自动保存完成: id=$id, carb=${state.totalCarbIntake}g")
+            _uiState.update { it.copy(savedFoodRecordId = id, recordDate = now) }
+            Log.i(TAG, "自动保存完成: id=$id, recordDate=$now, carb=${state.totalCarbIntake}g")
         } catch (e: Exception) {
             Log.e(TAG, "自动保存失败: ${e.message}", e)
         }

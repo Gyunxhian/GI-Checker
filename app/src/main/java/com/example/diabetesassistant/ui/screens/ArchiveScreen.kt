@@ -2,22 +2,34 @@ package com.example.diabetesassistant.ui.screens
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -51,19 +63,31 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -158,17 +182,98 @@ fun ArchiveScreen(
         }
     }
 
+    // 分时段碳水数据聚合 (日看板 0~10h, 11~17h, 18~24h)
+    val daySlotDataList = remember(recordsInPeriod, selectedPeriod) {
+        if (selectedPeriod != StatsPeriod.DAY) emptyList()
+        else {
+            var mMeat = 0f; var mVeg = 0f; var mCount = 0
+            var aMeat = 0f; var aVeg = 0f; var aCount = 0
+            var eMeat = 0f; var eVeg = 0f; var eCount = 0
+
+            recordsInPeriod.forEach { rec ->
+                val localTime = Instant.ofEpochMilli(rec.recordDate)
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDateTime()
+                val hour = localTime.hour
+                val slot = CarbTimeSlot.fromHour(hour)
+                try {
+                    val parsed = gson.fromJson(rec.aiJson, AnalysisResultJson::class.java)
+                    if (parsed != null) {
+                        val total = parsed.totalCarbIntake
+                        val mRatio = parsed.meatRatio.coerceIn(0f, 1f)
+                        val meat = total * mRatio
+                        val veg = total * (1f - mRatio)
+                        when (slot) {
+                            CarbTimeSlot.MORNING -> { mMeat += meat; mVeg += veg; mCount++ }
+                            CarbTimeSlot.AFTERNOON -> { aMeat += meat; aVeg += veg; aCount++ }
+                            CarbTimeSlot.EVENING -> { eMeat += meat; eVeg += veg; eCount++ }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            listOf(
+                DaySlotCarbData(CarbTimeSlot.MORNING, mMeat, mVeg, mMeat + mVeg, mCount),
+                DaySlotCarbData(CarbTimeSlot.AFTERNOON, aMeat, aVeg, aMeat + aVeg, aCount),
+                DaySlotCarbData(CarbTimeSlot.EVENING, eMeat, eVeg, eMeat + eVeg, eCount),
+            )
+        }
+    }
+
+    // 自然日碳水数据聚合 (周看板 7 天，月看板 30 天)
+    val dailyCarbList = remember(allRecords, selectedPeriod) {
+        if (selectedPeriod == StatsPeriod.DAY) emptyList()
+        else {
+            val now = LocalDate.now()
+            val daysCount = if (selectedPeriod == StatsPeriod.WEEK) 7 else 30
+            val dates = (daysCount - 1 downTo 0).map { now.minusDays(it.toLong()) }
+            val recordMap = allRecords.groupBy {
+                Instant.ofEpochMilli(it.recordDate).atZone(ZoneId.systemDefault()).toLocalDate()
+            }
+
+            dates.map { date ->
+                val recs = recordMap[date] ?: emptyList()
+                var morning = 0f
+                var afternoon = 0f
+                var evening = 0f
+                var mealCount = 0
+
+                recs.forEach { rec ->
+                    val hour = Instant.ofEpochMilli(rec.recordDate).atZone(ZoneId.systemDefault()).hour
+                    try {
+                        val parsed = gson.fromJson(rec.aiJson, AnalysisResultJson::class.java)
+                        if (parsed != null) {
+                            mealCount++
+                            val total = parsed.totalCarbIntake
+                            when (CarbTimeSlot.fromHour(hour)) {
+                                CarbTimeSlot.MORNING -> morning += total
+                                CarbTimeSlot.AFTERNOON -> afternoon += total
+                                CarbTimeSlot.EVENING -> evening += total
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                DailyCarbData(
+                    date = date,
+                    morningCarbs = morning,
+                    afternoonCarbs = afternoon,
+                    eveningCarbs = evening,
+                    totalCarbs = morning + afternoon + evening,
+                    mealCount = mealCount,
+                )
+            }
+        }
+    }
+
     // 真实数据库分析指标计算 (绝无任何虚构 mock 数据)
-    val statsAnalysis = remember(recordsInPeriod) {
+    val statsAnalysis = remember(recordsInPeriod, selectedPeriod) {
         var totalCarbs = 0f
         var lowGiCount = 0
         var medGiCount = 0
         var highGiCount = 0
-        var peakSum = 0f
-        var peakValidCount = 0
 
         val sortedRecords = recordsInPeriod.sortedBy { it.recordDate }
-        val curvePointsList = mutableListOf<Float>()
 
         sortedRecords.forEach { rec ->
             try {
@@ -181,12 +286,6 @@ fun ArchiveScreen(
                         gi <= 70f -> medGiCount++
                         else -> highGiCount++
                     }
-                    val peak = parsed.curvePoints?.maxOfOrNull { it.bloodSugar }
-                    if (peak != null && peak > 0f) {
-                        peakSum += peak
-                        peakValidCount++
-                        curvePointsList.add(peak)
-                    }
                 }
             } catch (_: Exception) {}
         }
@@ -194,13 +293,6 @@ fun ArchiveScreen(
         val totalMeals = recordsInPeriod.size
         val hasData = totalMeals > 0
         val avgDailyCarbs = if (!hasData) 0f else if (selectedPeriod == StatsPeriod.DAY) totalCarbs else (totalCarbs / (if (selectedPeriod == StatsPeriod.WEEK) 7f else 30f))
-        val avgPeak: Float? = if (peakValidCount > 0) peakSum / peakValidCount else null
-        val complianceRate: Int? = if (peakValidCount > 0) {
-            val optimal = curvePointsList.count { it < 7.8f }
-            ((optimal.toFloat() / peakValidCount) * 100).toInt()
-        } else {
-            null
-        }
 
         val realFiber = if (hasData) totalCarbs * 0.12f else 0f
         val realCalories = if (hasData) (totalCarbs * 4f * 1.8f + totalMeals * 80f) else 0f
@@ -215,9 +307,6 @@ fun ArchiveScreen(
             val lowGi = lowGiCount
             val medGi = medGiCount
             val highGi = highGiCount
-            val avgBloodSugarPeak = avgPeak
-            val compliance = complianceRate
-            val points = curvePointsList
         }
     }
 
@@ -229,7 +318,7 @@ fun ArchiveScreen(
             contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // 1. 顶部标题栏与日/周/月周期切换胶囊 (参考图1风格)
+            // 1. 顶部标题栏与日/周/月周期切换胶囊
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
@@ -237,47 +326,30 @@ fun ArchiveScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "代谢分析与历史看板",
-                                fontSize = 22.sp,
+                                fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = HealthPalette.textPrimary(),
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "多维复盘周期血糖趋势与饮食结构",
-                                fontSize = 12.sp,
+                                fontSize = 11.5.sp,
                                 color = HealthPalette.textSecondary(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
 
+                        Spacer(modifier = Modifier.width(12.dp))
+
                         // 日 / 周 / 月 药丸切换器
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = HealthPalette.chipSurface(),
-                            shadowElevation = 2.dp,
-                        ) {
-                            Row(modifier = Modifier.padding(3.dp)) {
-                                StatsPeriod.entries.forEach { p ->
-                                    val isSelected = p == selectedPeriod
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(if (isSelected) HealthPalette.Secondary else Color.Transparent)
-                                            .clickable { selectedPeriod = p }
-                                            .padding(horizontal = 14.dp, vertical = 6.dp),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Text(
-                                            text = p.title,
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) Color.White else HealthPalette.textPrimary(),
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        PeriodCycleSwitcher(
+                            selectedPeriod = selectedPeriod,
+                            onPeriodSelected = { selectedPeriod = it },
+                        )
                     }
 
                     // 若是日视图，则展示水平日期滑动条
@@ -295,18 +367,19 @@ fun ArchiveScreen(
             item {
                 PeriodComplianceSummaryCard(
                     period = selectedPeriod,
-                    complianceRate = statsAnalysis.compliance,
+                    lowGiCount = statsAnalysis.lowGi,
+                    carbs = statsAnalysis.carbs,
                     avgCarbs = statsAnalysis.avgCarbs,
-                    avgPeak = statsAnalysis.avgBloodSugarPeak,
                     totalMeals = statsAnalysis.total,
                 )
             }
 
-            // 3. 餐后血糖预测波动趋势线（Trend Chart）
+            // 3. 碳水化合物摄入量柱状图 (Carb Intake Bar Chart)
             item {
-                BloodSugarTrendChartCard(
+                CarbIntakeBarChartCard(
                     period = selectedPeriod,
-                    dataPoints = statsAnalysis.points,
+                    daySlots = daySlotDataList,
+                    periodDays = dailyCarbList,
                 )
             }
 
@@ -443,16 +516,18 @@ fun ArchiveScreen(
 }
 
 /**
- * 周期达标与摄入概览卡片 (真实数据库分析计算呈现)
+ * 周期达标与摄入概览卡片 (真实数据库分析计算呈现，均衡三列布局)
  */
 @Composable
 private fun PeriodComplianceSummaryCard(
     period: StatsPeriod,
-    complianceRate: Int?,
+    lowGiCount: Int,
+    carbs: Float,
     avgCarbs: Float,
-    avgPeak: Float?,
     totalMeals: Int,
 ) {
+    val lowGiRate = if (totalMeals > 0) ((lowGiCount.toFloat() / totalMeals) * 100).toInt() else null
+
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(26.dp),
@@ -493,7 +568,7 @@ private fun PeriodComplianceSummaryCard(
                     color = HealthPalette.pastelLavender(),
                 ) {
                     Text(
-                        text = if (complianceRate != null) "达标率 $complianceRate%" else "待记录",
+                        text = if (lowGiRate != null) "低GI率 $lowGiRate%" else "待记录",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = HealthPalette.Secondary,
@@ -508,13 +583,21 @@ private fun PeriodComplianceSummaryCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceAround,
             ) {
-                MetricColumnItem(title = "日均碳水摄入", value = "%.1fg".format(avgCarbs), sub = "推荐<=130g")
+                if (period == StatsPeriod.DAY) {
+                    MetricColumnItem(title = "今日总碳水", value = "%.1fg".format(carbs), sub = "推荐<=130g")
+                } else {
+                    MetricColumnItem(title = "日均碳水摄入", value = "%.1fg".format(avgCarbs), sub = "推荐<=130g")
+                }
                 MetricColumnItem(
-                    title = "平均预测峰值",
-                    value = if (avgPeak != null) "%.1f".format(avgPeak) else "--",
-                    sub = if (avgPeak != null) "mmol/L (目标<7.8)" else "暂无记录",
+                    title = "低GI优选率",
+                    value = if (lowGiRate != null) "$lowGiRate%" else "--",
+                    sub = if (totalMeals > 0) "${lowGiCount}餐优选(GI<=55)" else "暂无记录",
                 )
-                MetricColumnItem(title = "累计餐次", value = "$totalMeals 餐", sub = if (totalMeals > 0) "已记录" else "暂无记录")
+                MetricColumnItem(
+                    title = "累计记录餐次",
+                    value = "$totalMeals 餐",
+                    sub = if (totalMeals > 0) "已记录" else "暂无记录",
+                )
             }
         }
     }
@@ -531,20 +614,135 @@ private fun MetricColumnItem(title: String, value: String, sub: String) {
     }
 }
 
+@Composable
+private fun PeriodCycleSwitcher(
+    selectedPeriod: StatsPeriod,
+    onPeriodSelected: (StatsPeriod) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val periods = StatsPeriod.entries
+    val selectedIndex = periods.indexOf(selectedPeriod)
+
+    Surface(
+        modifier = modifier
+            .width(138.dp)
+            .height(36.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = HealthPalette.chipSurface(),
+        shadowElevation = 2.dp,
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(3.dp),
+        ) {
+            val tabWidth = maxWidth / periods.size
+            val indicatorOffset by animateDpAsState(
+                targetValue = tabWidth * selectedIndex,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+                label = "periodIndicatorOffset",
+            )
+
+            // 1. 弹性滑动高亮指示器
+            Box(
+                modifier = Modifier
+                    .offset(x = indicatorOffset)
+                    .width(tabWidth)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(HealthPalette.Secondary),
+            )
+
+            // 2. 三个等宽点击选项胶囊与平滑颜色过渡
+            Row(modifier = Modifier.fillMaxSize()) {
+                periods.forEach { period ->
+                    val isSelected = period == selectedPeriod
+                    val textColor by animateColorAsState(
+                        targetValue = if (isSelected) Color.White else HealthPalette.textPrimary(),
+                        animationSpec = tween(durationMillis = 200),
+                        label = "periodTextColor_${period.name}",
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { onPeriodSelected(period) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = period.title,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = textColor,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+enum class CarbTimeSlot(val label: String, val timeRange: String) {
+    MORNING("上午", "00:00-10:59"),
+    AFTERNOON("下午", "11:00-17:59"),
+    EVENING("晚上", "18:00-23:59");
+
+    companion object {
+        fun fromHour(hour: Int): CarbTimeSlot = when (hour) {
+            in 0..10 -> MORNING
+            in 11..17 -> AFTERNOON
+            else -> EVENING
+        }
+    }
+}
+
+data class DaySlotCarbData(
+    val slot: CarbTimeSlot,
+    val meatCarbs: Float,
+    val vegCarbs: Float,
+    val totalCarbs: Float,
+    val mealCount: Int,
+)
+
+data class DailyCarbData(
+    val date: LocalDate,
+    val morningCarbs: Float,
+    val afternoonCarbs: Float,
+    val eveningCarbs: Float,
+    val totalCarbs: Float,
+    val mealCount: Int,
+)
+
 /**
- * 餐后血糖预测波动趋势线（Trend Chart）
+ * 碳水化合物摄入量堆叠柱状图 (Carbohydrate Intake Bar Chart)
+ * 日看板：分上午、下午、晚上 3 根柱状图，堆叠呈现荤素碳水；
+ * 周/月看板：按自然日呈现每日总碳水，柱体内分 3 时段堆叠配色；
+ * 点击任意柱体呈现紧贴锚定的悬浮气泡明细 Tooltip，点击空白区域或外部销毁。
  */
 @Composable
-private fun BloodSugarTrendChartCard(
+private fun CarbIntakeBarChartCard(
     period: StatsPeriod,
-    dataPoints: List<Float>,
+    daySlots: List<DaySlotCarbData>,
+    periodDays: List<DailyCarbData>,
 ) {
+    var selectedBarIndex by remember(period) { mutableStateOf<Int?>(null) }
+    var anchorWindowOffset by remember(period) { mutableStateOf<Offset?>(null) }
+    var chartBoxWindowPosition by remember { mutableStateOf(Offset.Zero) }
+
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(26.dp),
         elevation = 6.dp,
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
+            // 顶栏：标题与动态分色图例
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -555,166 +753,498 @@ private fun BloodSugarTrendChartCard(
                         modifier = Modifier
                             .size(24.dp)
                             .clip(CircleShape)
-                            .background(HealthPalette.pastelButter()),
+                            .background(HealthPalette.pastelMint()),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Timeline,
                             contentDescription = null,
-                            tint = Color(0xFF996515),
+                            tint = HealthPalette.Secondary,
                             modifier = Modifier.size(14.dp),
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "餐后血糖预测波动走势",
+                        text = "碳水化合物摄入量",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = HealthPalette.textPrimary(),
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp, 2.dp)
-                            .background(Color.Gray.copy(alpha = 0.5f))
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "基线 7.8",
-                        fontSize = 10.sp,
-                        color = HealthPalette.textMuted(),
-                    )
+                if (period == StatsPeriod.DAY) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(HealthPalette.Secondary))
+                            Spacer(Modifier.width(4.dp))
+                            Text(text = "素食碳水", fontSize = 10.sp, color = HealthPalette.textMuted())
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFE76F51)))
+                            Spacer(Modifier.width(4.dp))
+                            Text(text = "荤食碳水", fontSize = 10.sp, color = HealthPalette.textMuted())
+                        }
+                    }
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFF4A261)))
+                            Spacer(Modifier.width(4.dp))
+                            Text(text = "上午", fontSize = 10.sp, color = HealthPalette.textMuted())
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(HealthPalette.Secondary))
+                            Spacer(Modifier.width(4.dp))
+                            Text(text = "下午", fontSize = 10.sp, color = HealthPalette.textMuted())
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF457B9D)))
+                            Spacer(Modifier.width(4.dp))
+                            Text(text = "晚上", fontSize = 10.sp, color = HealthPalette.textMuted())
+                        }
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Canvas 曲线图 (真实时间序列曲线，无数据时展示优雅指引占位)
+            // 柱状图主绘制与交互区域
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(110.dp)
+                    .height(145.dp)
+                    .onGloballyPositioned { coordinates ->
+                        chartBoxWindowPosition = coordinates.positionInWindow()
+                    }
+                    .pointerInput(period, daySlots, periodDays) {
+                        detectTapGestures { tapOffset ->
+                            val width = size.width.toFloat()
+                            val height = size.height.toFloat()
+                            val chartHeight = height - 26.dp.toPx()
+
+                            if (period == StatsPeriod.DAY) {
+                                if (daySlots.isEmpty()) return@detectTapGestures
+                                val slotWidth = width / daySlots.size
+                                val index = (tapOffset.x / slotWidth).toInt().coerceIn(0, daySlots.size - 1)
+                                val item = daySlots[index]
+                                val barCenterX = slotWidth * index + slotWidth / 2f
+                                val maxVal = maxOf(40f, daySlots.maxOfOrNull { it.totalCarbs } ?: 40f) * 1.15f
+                                val barHeight = if (item.totalCarbs > 0f) (item.totalCarbs / maxVal) * chartHeight else 6.dp.toPx()
+                                val barTopY = chartHeight - barHeight
+
+                                if (tapOffset.y in (barTopY - 20.dp.toPx())..(chartHeight + 20.dp.toPx())) {
+                                    selectedBarIndex = index
+                                    anchorWindowOffset = chartBoxWindowPosition + Offset(barCenterX, barTopY)
+                                } else {
+                                    selectedBarIndex = null
+                                    anchorWindowOffset = null
+                                }
+                            } else {
+                                if (periodDays.isEmpty()) return@detectTapGestures
+                                val slotWidth = width / periodDays.size
+                                val index = (tapOffset.x / slotWidth).toInt().coerceIn(0, periodDays.size - 1)
+                                val item = periodDays[index]
+                                val barCenterX = slotWidth * index + slotWidth / 2f
+                                val maxVal = maxOf(40f, periodDays.maxOfOrNull { it.totalCarbs } ?: 40f) * 1.15f
+                                val barHeight = if (item.totalCarbs > 0f) (item.totalCarbs / maxVal) * chartHeight else 4.dp.toPx()
+                                val barTopY = chartHeight - barHeight
+
+                                if (tapOffset.y in (barTopY - 20.dp.toPx())..(chartHeight + 20.dp.toPx())) {
+                                    selectedBarIndex = index
+                                    anchorWindowOffset = chartBoxWindowPosition + Offset(barCenterX, barTopY)
+                                } else {
+                                    selectedBarIndex = null
+                                    anchorWindowOffset = null
+                                }
+                            }
+                        }
+                    },
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val w = size.width
                     val h = size.height
-                    val maxVal = 11.0f
-                    val minVal = 4.0f
-                    val baselineVal = 7.8f
+                    val labelHeight = 24.dp.toPx()
+                    val chartHeight = h - labelHeight
 
-                    // 1. 绘制 7.8 安全基线 (虚线)
-                    val baselineY = h - ((baselineVal - minVal) / (maxVal - minVal)) * h
+                    // 绘制微妙参考底线
                     drawLine(
-                        color = Color(0xFFE76F51).copy(alpha = 0.55f),
-                        start = Offset(0f, baselineY),
-                        end = Offset(w, baselineY),
-                        strokeWidth = 1.2.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f)),
+                        color = Color.Gray.copy(alpha = 0.2f),
+                        start = Offset(0f, chartHeight),
+                        end = Offset(w, chartHeight),
+                        strokeWidth = 1.dp.toPx(),
                     )
 
-                    if (dataPoints.isEmpty()) return@Canvas
+                    if (period == StatsPeriod.DAY) {
+                        if (daySlots.isEmpty()) return@Canvas
+                        val count = daySlots.size
+                        val slotWidth = w / count
+                        val barWidth = 38.dp.toPx()
+                        val maxVal = maxOf(40f, daySlots.maxOfOrNull { it.totalCarbs } ?: 40f) * 1.15f
 
-                    if (dataPoints.size == 1) {
-                        val singleVal = dataPoints[0]
-                        val ratio = ((singleVal - minVal) / (maxVal - minVal)).coerceIn(0f, 1f)
-                        val pt = Offset(w / 2f, h - ratio * h)
-                        drawCircle(color = Color.White, radius = 5.dp.toPx(), center = pt)
-                        drawCircle(
-                            color = if (singleVal >= baselineVal) Color(0xFFE76F51) else HealthPalette.Secondary,
-                            radius = 3.5.dp.toPx(),
-                            center = pt,
-                        )
-                        return@Canvas
-                    }
+                        daySlots.forEachIndexed { idx, slot ->
+                            val centerX = slotWidth * idx + slotWidth / 2f
+                            val left = centerX - barWidth / 2f
+                            val isSelected = selectedBarIndex == idx
 
-                    val stepX = w / (dataPoints.size - 1).coerceAtLeast(1)
-                    val points = dataPoints.mapIndexed { idx, v ->
-                        val ratio = ((v - minVal) / (maxVal - minVal)).coerceIn(0f, 1f)
-                        Offset(x = idx * stepX, y = h - ratio * h)
-                    }
+                            if (slot.totalCarbs <= 0f) {
+                                // 空态小胶囊
+                                drawRoundRect(
+                                    color = Color.LightGray.copy(alpha = 0.25f),
+                                    topLeft = Offset(left, chartHeight - 6.dp.toPx()),
+                                    size = Size(barWidth, 6.dp.toPx()),
+                                    cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                                )
+                            } else {
+                                val vegHeight = (slot.vegCarbs / maxVal) * chartHeight
+                                val meatHeight = (slot.meatCarbs / maxVal) * chartHeight
+                                val totalHeight = vegHeight + meatHeight
 
-                    // 2. 绘制渐变填充
-                    val fillPath = Path().apply {
-                        moveTo(points.first().x, points.first().y)
-                        for (i in 1 until points.size) {
-                            val prev = points[i - 1]
-                            val curr = points[i]
-                            val cx = (prev.x + curr.x) / 2f
-                            cubicTo(cx, prev.y, cx, curr.y, curr.x, curr.y)
+                                // 选中时的高光外晕
+                                if (isSelected) {
+                                    drawRoundRect(
+                                        color = HealthPalette.Secondary.copy(alpha = 0.15f),
+                                        topLeft = Offset(left - 4.dp.toPx(), chartHeight - totalHeight - 4.dp.toPx()),
+                                        size = Size(barWidth + 8.dp.toPx(), totalHeight + 8.dp.toPx()),
+                                        cornerRadius = CornerRadius(14.dp.toPx(), 14.dp.toPx()),
+                                    )
+                                }
+
+                                // 1. 下层素食碳水 (薄荷绿)
+                                if (slot.vegCarbs > 0f) {
+                                    val vegTop = chartHeight - vegHeight
+                                    drawRoundRect(
+                                        color = HealthPalette.Secondary,
+                                        topLeft = Offset(left, vegTop),
+                                        size = Size(barWidth, vegHeight),
+                                        cornerRadius = if (slot.meatCarbs <= 0f) CornerRadius(10.dp.toPx(), 10.dp.toPx()) else CornerRadius(0f, 0f),
+                                    )
+                                }
+
+                                // 2. 上层荤食碳水 (暖琥珀橙)
+                                if (slot.meatCarbs > 0f) {
+                                    val meatTop = chartHeight - totalHeight
+                                    drawRoundRect(
+                                        color = Color(0xFFE76F51),
+                                        topLeft = Offset(left, meatTop),
+                                        size = Size(barWidth, meatHeight),
+                                        cornerRadius = CornerRadius(10.dp.toPx(), 10.dp.toPx()),
+                                    )
+                                }
+                            }
                         }
-                        lineTo(points.last().x, h)
-                        lineTo(points.first().x, h)
-                        close()
-                    }
+                    } else {
+                        // 周 / 月 视图
+                        if (periodDays.isEmpty()) return@Canvas
+                        val count = periodDays.size
+                        val slotWidth = w / count
+                        val isWeek = period == StatsPeriod.WEEK
+                        val barWidth = if (isWeek) (slotWidth * 0.45f).coerceIn(12.dp.toPx(), 20.dp.toPx())
+                        else (slotWidth * 0.65f).coerceIn(4.dp.toPx(), 8.dp.toPx())
+                        val cornerRadiusPx = if (isWeek) 6.dp.toPx() else 2.dp.toPx()
+                        val maxVal = maxOf(40f, periodDays.maxOfOrNull { it.totalCarbs } ?: 40f) * 1.15f
 
-                    drawPath(
-                        path = fillPath,
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                HealthPalette.Secondary.copy(alpha = 0.35f),
-                                HealthPalette.Secondary.copy(alpha = 0.03f),
-                            )
-                        ),
-                    )
+                        periodDays.forEachIndexed { idx, day ->
+                            val centerX = slotWidth * idx + slotWidth / 2f
+                            val left = centerX - barWidth / 2f
+                            val isSelected = selectedBarIndex == idx
 
-                    // 3. 绘制平滑曲线
-                    val strokePath = Path().apply {
-                        moveTo(points.first().x, points.first().y)
-                        for (i in 1 until points.size) {
-                            val prev = points[i - 1]
-                            val curr = points[i]
-                            val cx = (prev.x + curr.x) / 2f
-                            cubicTo(cx, prev.y, cx, curr.y, curr.x, curr.y)
+                            if (day.totalCarbs <= 0f) {
+                                drawRoundRect(
+                                    color = Color.LightGray.copy(alpha = 0.25f),
+                                    topLeft = Offset(left, chartHeight - 4.dp.toPx()),
+                                    size = Size(barWidth, 4.dp.toPx()),
+                                    cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
+                                )
+                            } else {
+                                val mHeight = (day.morningCarbs / maxVal) * chartHeight
+                                val aHeight = (day.afternoonCarbs / maxVal) * chartHeight
+                                val eHeight = (day.eveningCarbs / maxVal) * chartHeight
+                                val totalHeight = mHeight + aHeight + eHeight
+
+                                if (isSelected) {
+                                    drawRoundRect(
+                                        color = HealthPalette.Secondary.copy(alpha = 0.18f),
+                                        topLeft = Offset(left - 3.dp.toPx(), chartHeight - totalHeight - 3.dp.toPx()),
+                                        size = Size(barWidth + 6.dp.toPx(), totalHeight + 6.dp.toPx()),
+                                        cornerRadius = CornerRadius(cornerRadiusPx + 2.dp.toPx(), cornerRadiusPx + 2.dp.toPx()),
+                                    )
+                                }
+
+                                // 1. 上午段 (暖黄色 0xFFF4A261)
+                                if (day.morningCarbs > 0f) {
+                                    val mTop = chartHeight - mHeight
+                                    drawRoundRect(
+                                        color = Color(0xFFF4A261),
+                                        topLeft = Offset(left, mTop),
+                                        size = Size(barWidth, mHeight),
+                                        cornerRadius = if (day.afternoonCarbs <= 0f && day.eveningCarbs <= 0f) CornerRadius(cornerRadiusPx, cornerRadiusPx) else CornerRadius(0f, 0f),
+                                    )
+                                }
+
+                                // 2. 下午段 (清新绿 HealthPalette.Secondary)
+                                if (day.afternoonCarbs > 0f) {
+                                    val aTop = chartHeight - (mHeight + aHeight)
+                                    drawRoundRect(
+                                        color = HealthPalette.Secondary,
+                                        topLeft = Offset(left, aTop),
+                                        size = Size(barWidth, aHeight),
+                                        cornerRadius = if (day.eveningCarbs <= 0f) CornerRadius(cornerRadiusPx, cornerRadiusPx) else CornerRadius(0f, 0f),
+                                    )
+                                }
+
+                                // 3. 晚上段 (深夜蓝 0xFF457B9D)
+                                if (day.eveningCarbs > 0f) {
+                                    val eTop = chartHeight - totalHeight
+                                    drawRoundRect(
+                                        color = Color(0xFF457B9D),
+                                        topLeft = Offset(left, eTop),
+                                        size = Size(barWidth, eHeight),
+                                        cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
+                                    )
+                                }
+                            }
                         }
-                    }
-
-                    drawPath(
-                        path = strokePath,
-                        color = HealthPalette.Secondary,
-                        style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
-                    )
-
-                    // 4. 数据点高光圆
-                    points.forEachIndexed { idx, pt ->
-                        val isSpike = dataPoints[idx] >= baselineVal
-                        drawCircle(
-                            color = Color.White,
-                            radius = 4.dp.toPx(),
-                            center = pt,
-                        )
-                        drawCircle(
-                            color = if (isSpike) Color(0xFFE76F51) else HealthPalette.Dark,
-                            radius = 2.6.dp.toPx(),
-                            center = pt,
-                        )
                     }
                 }
 
-                if (dataPoints.isEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(bottom = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
+                // X 轴标签呈现
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .height(24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (period == StatsPeriod.DAY) {
+                        daySlots.forEach { slot ->
+                            Box(
+                                modifier = Modifier.weight(1f),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = slot.slot.label,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = HealthPalette.textMuted(),
+                                )
+                            }
+                        }
+                    } else if (period == StatsPeriod.WEEK) {
+                        val dayNames = listOf("一", "二", "三", "四", "五", "六", "日")
+                        periodDays.forEach { day ->
+                            val weekDayIndex = (day.date.dayOfWeek.value - 1).coerceIn(0, 6)
+                            Box(
+                                modifier = Modifier.weight(1f),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = dayNames[weekDayIndex],
+                                    fontSize = 11.sp,
+                                    color = if (day.date == LocalDate.now()) HealthPalette.Secondary else HealthPalette.textMuted(),
+                                    fontWeight = if (day.date == LocalDate.now()) FontWeight.Bold else FontWeight.Normal,
+                                )
+                            }
+                        }
+                    } else {
+                        // 月视图：显示代表性日期刻度
+                        periodDays.forEachIndexed { idx, day ->
+                            Box(
+                                modifier = Modifier.weight(1f),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (idx % 6 == 0 || idx == periodDays.lastIndex) {
+                                    Text(
+                                        text = "${day.date.dayOfMonth}",
+                                        fontSize = 9.sp,
+                                        color = HealthPalette.textMuted(),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 悬浮紧贴气泡浮层 Tooltip (点击外部区域即时销毁)
+                if (selectedBarIndex != null && anchorWindowOffset != null) {
+                    Popup(
+                        popupPositionProvider = remember(anchorWindowOffset) {
+                            object : PopupPositionProvider {
+                                override fun calculatePosition(
+                                    anchorBounds: IntRect,
+                                    windowSize: IntSize,
+                                    layoutDirection: LayoutDirection,
+                                    popupContentSize: IntSize,
+                                ): IntOffset {
+                                    val anchor = anchorWindowOffset ?: return IntOffset.Zero
+                                    val x = (anchor.x - popupContentSize.width / 2f).toInt()
+                                        .coerceIn(16, windowSize.width - popupContentSize.width - 16)
+                                    val y = (anchor.y - popupContentSize.height - 10).toInt()
+                                        .coerceIn(16, windowSize.height - popupContentSize.height - 16)
+                                    return IntOffset(x, y)
+                                }
+                            }
+                        },
+                        onDismissRequest = {
+                            selectedBarIndex = null
+                            anchorWindowOffset = null
+                        },
+                        properties = PopupProperties(
+                            dismissOnClickOutside = true,
+                            dismissOnBackPress = true,
+                        ),
                     ) {
-                        Text(
-                            text = "暂无餐后血糖波动记录",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = HealthPalette.textPrimary(),
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "拍照测算餐盘后将基于真实餐食自动绘制走势",
-                            fontSize = 10.sp,
-                            color = HealthPalette.textMuted(),
-                        )
+                        if (period == StatsPeriod.DAY) {
+                            val slotData = daySlots.getOrNull(selectedBarIndex!!)
+                            if (slotData != null) {
+                                DayCarbTooltipBubble(
+                                    data = slotData,
+                                    onDismiss = {
+                                        selectedBarIndex = null
+                                        anchorWindowOffset = null
+                                    },
+                                )
+                            }
+                        } else {
+                            val dayData = periodDays.getOrNull(selectedBarIndex!!)
+                            if (dayData != null) {
+                                PeriodCarbTooltipBubble(
+                                    data = dayData,
+                                    onDismiss = {
+                                        selectedBarIndex = null
+                                        anchorWindowOffset = null
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DayCarbTooltipBubble(
+    data: DaySlotCarbData,
+    onDismiss: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+        shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+        modifier = Modifier.clickable(onClick = onDismiss),
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .widthIn(min = 140.dp, max = 200.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "${data.slot.label} (${data.slot.timeRange})",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = HealthPalette.textPrimary(),
+                )
+            }
+            Text(
+                text = "时段总碳水: ${"%.1f".format(data.totalCarbs)}g",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = HealthPalette.Secondary,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(HealthPalette.Secondary))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = "素食碳水: ${"%.1f".format(data.vegCarbs)}g (${if (data.totalCarbs > 0) ((data.vegCarbs / data.totalCarbs) * 100).toInt() else 0}%)",
+                    fontSize = 10.sp,
+                    color = HealthPalette.textSecondary(),
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFE76F51)))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = "荤食碳水: ${"%.1f".format(data.meatCarbs)}g (${if (data.totalCarbs > 0) ((data.meatCarbs / data.totalCarbs) * 100).toInt() else 0}%)",
+                    fontSize = 10.sp,
+                    color = HealthPalette.textSecondary(),
+                )
+            }
+            Text(
+                text = "累计记录 ${data.mealCount} 餐",
+                fontSize = 9.5.sp,
+                color = HealthPalette.textMuted(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PeriodCarbTooltipBubble(
+    data: DailyCarbData,
+    onDismiss: () -> Unit,
+) {
+    val weekDayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+    val weekDayStr = weekDayNames[(data.date.dayOfWeek.value - 1).coerceIn(0, 6)]
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+        shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+        modifier = Modifier.clickable(onClick = onDismiss),
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .widthIn(min = 140.dp, max = 200.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "${data.date.monthValue}月${data.date.dayOfMonth}日 ($weekDayStr)",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = HealthPalette.textPrimary(),
+            )
+            Text(
+                text = "当日总碳水: ${"%.1f".format(data.totalCarbs)}g",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = HealthPalette.Secondary,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFF4A261)))
+                Spacer(Modifier.width(4.dp))
+                Text(text = "上午 (0~10h): ${"%.1f".format(data.morningCarbs)}g", fontSize = 10.sp, color = HealthPalette.textSecondary())
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(HealthPalette.Secondary))
+                Spacer(Modifier.width(4.dp))
+                Text(text = "下午 (11~17h): ${"%.1f".format(data.afternoonCarbs)}g", fontSize = 10.sp, color = HealthPalette.textSecondary())
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF457B9D)))
+                Spacer(Modifier.width(4.dp))
+                Text(text = "晚上 (18~24h): ${"%.1f".format(data.eveningCarbs)}g", fontSize = 10.sp, color = HealthPalette.textSecondary())
+            }
+            Text(
+                text = "累计记录 ${data.mealCount} 餐",
+                fontSize = 9.5.sp,
+                color = HealthPalette.textMuted(),
+            )
         }
     }
 }
@@ -836,29 +1366,67 @@ private fun GiDistributionCard(
             // 比例图例说明
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                GiLegendItem(color = HealthPalette.Secondary, label = "低GI (<55)", percent = (lowRatio * 100).toInt())
-                GiLegendItem(color = Color(0xFFF4C84E), label = "中GI (55-70)", percent = (medRatio * 100).toInt())
-                GiLegendItem(color = HealthPalette.Danger, label = "高GI (>70)", percent = (highRatio * 100).toInt())
+                GiLegendItem(
+                    color = HealthPalette.Secondary,
+                    label = "低GI (<55)",
+                    percent = (lowRatio * 100).toInt(),
+                    modifier = Modifier.weight(1f),
+                )
+                GiLegendItem(
+                    color = Color(0xFFF4C84E),
+                    label = "中GI (55-70)",
+                    percent = (medRatio * 100).toInt(),
+                    modifier = Modifier.weight(1f),
+                )
+                GiLegendItem(
+                    color = HealthPalette.Danger,
+                    label = "高GI (>70)",
+                    percent = (highRatio * 100).toInt(),
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun GiLegendItem(color: Color, label: String, percent: Int) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun GiLegendItem(
+    color: Color,
+    label: String,
+    percent: Int,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
         Box(
             modifier = Modifier
-                .size(8.dp)
+                .size(7.dp)
                 .clip(CircleShape)
                 .background(color)
         )
-        Spacer(modifier = Modifier.width(5.dp))
-        Text(text = label, fontSize = 11.sp, color = HealthPalette.textMuted())
         Spacer(modifier = Modifier.width(3.dp))
-        Text(text = "$percent%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = HealthPalette.textPrimary())
+        Text(
+            text = label,
+            fontSize = 10.5.sp,
+            color = HealthPalette.textMuted(),
+            maxLines = 1,
+            softWrap = false,
+        )
+        Spacer(modifier = Modifier.width(2.dp))
+        Text(
+            text = "$percent%",
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = HealthPalette.textPrimary(),
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
@@ -1030,33 +1598,35 @@ private fun ModernMealRecordGlassCard(
                     )
                 }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    // GI 标签
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = giBg,
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        // GI 标签
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = giBg,
+                        ) {
+                            Text(
+                                text = giText,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = giColor,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+
                         Text(
-                            text = giText,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = giColor,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            text = "碳水 ${"%.1f".format(parsed?.totalCarbIntake ?: 0f)}g",
+                            fontSize = 12.sp,
+                            color = HealthPalette.textSecondary(),
                         )
                     }
 
-                    Text(
-                        text = "碳水 ${"%.1f".format(parsed?.totalCarbIntake ?: 0f)}g",
-                        fontSize = 12.sp,
-                        color = HealthPalette.textSecondary(),
-                    )
-
                     if (peak > 0f) {
                         Text(
-                            text = "峰值 ${"%.1f".format(peak)} (${peakMin}分)",
+                            text = "峰值 ${"%.1f".format(peak)} mmol/L (${peakMin}分)",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (peak >= 7.8f) HealthPalette.Danger else HealthPalette.Secondary,

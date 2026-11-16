@@ -18,8 +18,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -167,41 +169,47 @@ fun CameraCaptureScreen(
         color = StagingBg,
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // 顶部导航栏
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            // 顶部导航栏，适配状态栏安全区域
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color.White,
+                shadowElevation = 1.dp,
             ) {
-                IconButton(onClick = onExitCamera) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        tint = BrandForest,
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "记录本次餐盘",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextDark,
-                    )
-                    Text(
-                        text = "支持拍摄或上传多道菜品，一次性合并测算",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextMuted,
-                    )
-                }
-                if (stagedImages.isNotEmpty()) {
-                    IconButton(onClick = { viewModel.clearStagedImages() }) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onExitCamera) {
                         Icon(
-                            imageVector = Icons.Filled.DeleteSweep,
-                            contentDescription = "清空全部",
-                            tint = Color(0xFFD62828),
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            tint = BrandForest,
                         )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "记录本次餐盘",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextDark,
+                        )
+                        Text(
+                            text = "支持拍摄或上传多道菜品，一次性合并测算",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted,
+                        )
+                    }
+                    if (stagedImages.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.clearStagedImages() }) {
+                            Icon(
+                                imageVector = Icons.Filled.DeleteSweep,
+                                contentDescription = "清空全部",
+                                tint = Color(0xFFD62828),
+                            )
+                        }
                     }
                 }
             }
@@ -447,7 +455,7 @@ fun CameraCaptureScreen(
                 }
             }
 
-            // 底部启动分析栏
+            // 底部启动分析栏，适配导航栏安全区域
             if (stagedImages.isNotEmpty()) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -458,6 +466,7 @@ fun CameraCaptureScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .navigationBarsPadding()
                             .padding(horizontal = 20.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
