@@ -50,7 +50,9 @@ import androidx.compose.material3.Text
 import com.example.diabetesassistant.ui.theme.LocalIsDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,6 +64,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,6 +74,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import java.io.File
 import com.example.diabetesassistant.camera.AnalysisResultJson
 import com.example.diabetesassistant.data.local.entity.FoodRecord
 import com.example.diabetesassistant.data.local.preferences.UserPreferencesDataSource
@@ -1045,6 +1050,11 @@ private fun BentoMealsTrayContainer(
                                 .clickable { onMealClick(record.id) },
                         ) {
                             Column(modifier = Modifier.padding(10.dp)) {
+                                val imageList = remember(record.imagePath) {
+                                    record.imagePath.split("|").map { it.trim() }.filter { it.isNotBlank() }
+                                }
+                                val firstImage = imageList.firstOrNull().orEmpty()
+
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1053,13 +1063,49 @@ private fun BentoMealsTrayContainer(
                                         .background(HealthPalette.cardBorder()),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    if (record.imagePath.isNotBlank()) {
-                                        AsyncImage(
-                                            model = record.imagePath,
-                                            contentDescription = record.dishName,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize(),
-                                        )
+                                    if (firstImage.isNotBlank()) {
+                                        var isImageError by remember(firstImage) { mutableStateOf(false) }
+
+                                        if (!isImageError) {
+                                            val imageModel = remember(firstImage) {
+                                                if (firstImage.startsWith("/")) File(firstImage) else firstImage
+                                            }
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(LocalContext.current)
+                                                    .data(imageModel)
+                                                    .crossfade(true)
+                                                    .build(),
+                                                contentDescription = record.dishName,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize(),
+                                                onError = { isImageError = true },
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Filled.Restaurant,
+                                                contentDescription = null,
+                                                tint = HealthPalette.textMuted(),
+                                                modifier = Modifier.size(26.dp),
+                                            )
+                                        }
+
+                                        if (imageList.size > 1) {
+                                            Surface(
+                                                shape = RoundedCornerShape(bottomStart = 6.dp, topEnd = 6.dp),
+                                                color = Color.Black.copy(alpha = 0.65f),
+                                                modifier = Modifier
+                                                    .align(Alignment.BottomEnd)
+                                                    .padding(3.dp),
+                                            ) {
+                                                Text(
+                                                    text = "${imageList.size}图",
+                                                    color = Color.White,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                                )
+                                            }
+                                        }
                                     } else {
                                         Icon(
                                             imageVector = Icons.Filled.Restaurant,

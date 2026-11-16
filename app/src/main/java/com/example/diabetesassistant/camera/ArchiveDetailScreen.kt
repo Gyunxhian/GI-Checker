@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import java.io.File
 import com.example.diabetesassistant.data.model.DishRecognitionResult
 import com.example.diabetesassistant.data.model.Ingredient
 import com.example.diabetesassistant.data.model.InsulinType
@@ -326,9 +327,10 @@ private fun DishImageSection(imageUri: String) {
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         ) {
+            val model = remember(singleUri) { if (singleUri.startsWith("/")) File(singleUri) else singleUri }
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(singleUri)
+                    .data(model)
                     .crossfade(true)
                     .build(),
                 contentDescription = "餐盘照片",
@@ -357,6 +359,7 @@ private fun DishImageSection(imageUri: String) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(images) { uri ->
+                    val model = remember(uri) { if (uri.startsWith("/")) File(uri) else uri }
                     Card(
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -366,7 +369,7 @@ private fun DishImageSection(imageUri: String) {
                     ) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
-                                .data(uri)
+                                .data(model)
                                 .crossfade(true)
                                 .build(),
                             contentDescription = "餐盘子图",

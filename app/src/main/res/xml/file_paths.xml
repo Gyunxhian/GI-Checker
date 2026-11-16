@@ -3,4 +3,10 @@
     <cache-path
         name="camera_captures"
         path="camera_captures" />
+    <files-path
+        name="meal_images"
+        path="meal_images" />
+    <files-path
+        name="camera_captures"
+        path="camera_captures" />
 </paths>

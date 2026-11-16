@@ -65,12 +65,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -93,6 +95,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import java.io.File
 import com.example.diabetesassistant.camera.AnalysisResultJson
 import com.example.diabetesassistant.data.local.entity.FoodRecord
 import com.example.diabetesassistant.data.repository.FoodRecordRepository
@@ -328,14 +332,17 @@ fun ArchiveScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "代谢分析与历史看板",
+                                text = "代谢分析看板",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = HealthPalette.textPrimary(),
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "多维复盘周期血糖趋势与饮食结构",
+                                text = "多维复盘周期与饮食结构",
                                 fontSize = 11.5.sp,
                                 color = HealthPalette.textSecondary(),
                                 maxLines = 1,
@@ -625,9 +632,9 @@ private fun PeriodCycleSwitcher(
 
     Surface(
         modifier = modifier
-            .width(138.dp)
-            .height(36.dp),
-        shape = RoundedCornerShape(18.dp),
+            .width(120.dp)
+            .height(34.dp),
+        shape = RoundedCornerShape(17.dp),
         color = HealthPalette.chipSurface(),
         shadowElevation = 2.dp,
     ) {
@@ -652,7 +659,7 @@ private fun PeriodCycleSwitcher(
                     .offset(x = indicatorOffset)
                     .width(tabWidth)
                     .fillMaxHeight()
-                    .clip(RoundedCornerShape(15.dp))
+                    .clip(RoundedCornerShape(14.dp))
                     .background(HealthPalette.Secondary),
             )
 
@@ -719,6 +726,38 @@ data class DailyCarbData(
     val totalCarbs: Float,
     val mealCount: Int,
 )
+
+/**
+ * 辅助绘制带受控圆角的堆叠柱状图单段 (顶部圆角，中间与底部平接缝)
+ */
+private fun DrawScope.drawBarSegment(
+    color: Color,
+    left: Float,
+    top: Float,
+    width: Float,
+    height: Float,
+    isTopSegment: Boolean,
+    isBottomSegment: Boolean = false,
+    topCornerRadius: Float = 0f,
+    bottomCornerRadius: Float = 0f,
+) {
+    if (height <= 0.5f || width <= 0.5f) return
+    val path = Path().apply {
+        addRoundRect(
+            RoundRect(
+                left = left,
+                top = top,
+                right = left + width,
+                bottom = top + height,
+                topLeftCornerRadius = if (isTopSegment && topCornerRadius > 0f) CornerRadius(topCornerRadius, topCornerRadius) else CornerRadius.Zero,
+                topRightCornerRadius = if (isTopSegment && topCornerRadius > 0f) CornerRadius(topCornerRadius, topCornerRadius) else CornerRadius.Zero,
+                bottomLeftCornerRadius = if (isBottomSegment && bottomCornerRadius > 0f) CornerRadius(bottomCornerRadius, bottomCornerRadius) else CornerRadius.Zero,
+                bottomRightCornerRadius = if (isBottomSegment && bottomCornerRadius > 0f) CornerRadius(bottomCornerRadius, bottomCornerRadius) else CornerRadius.Zero,
+            )
+        )
+    }
+    drawPath(path, color = color)
+}
 
 /**
  * 碳水化合物摄入量堆叠柱状图 (Carbohydrate Intake Bar Chart)
@@ -915,25 +954,38 @@ private fun CarbIntakeBarChartCard(
                                     )
                                 }
 
+                                val hasVeg = slot.vegCarbs > 0f
+                                val hasMeat = slot.meatCarbs > 0f
+
                                 // 1. 下层素食碳水 (薄荷绿)
-                                if (slot.vegCarbs > 0f) {
+                                if (hasVeg) {
                                     val vegTop = chartHeight - vegHeight
-                                    drawRoundRect(
+                                    drawBarSegment(
                                         color = HealthPalette.Secondary,
-                                        topLeft = Offset(left, vegTop),
-                                        size = Size(barWidth, vegHeight),
-                                        cornerRadius = if (slot.meatCarbs <= 0f) CornerRadius(10.dp.toPx(), 10.dp.toPx()) else CornerRadius(0f, 0f),
+                                        left = left,
+                                        top = vegTop,
+                                        width = barWidth,
+                                        height = vegHeight,
+                                        isTopSegment = !hasMeat,
+                                        isBottomSegment = true,
+                                        topCornerRadius = 10.dp.toPx(),
+                                        bottomCornerRadius = 0f,
                                     )
                                 }
 
                                 // 2. 上层荤食碳水 (暖琥珀橙)
-                                if (slot.meatCarbs > 0f) {
+                                if (hasMeat) {
                                     val meatTop = chartHeight - totalHeight
-                                    drawRoundRect(
+                                    drawBarSegment(
                                         color = Color(0xFFE76F51),
-                                        topLeft = Offset(left, meatTop),
-                                        size = Size(barWidth, meatHeight),
-                                        cornerRadius = CornerRadius(10.dp.toPx(), 10.dp.toPx()),
+                                        left = left,
+                                        top = meatTop,
+                                        width = barWidth,
+                                        height = meatHeight,
+                                        isTopSegment = true,
+                                        isBottomSegment = !hasVeg,
+                                        topCornerRadius = 10.dp.toPx(),
+                                        bottomCornerRadius = 0f,
                                     )
                                 }
                             }
@@ -976,36 +1028,58 @@ private fun CarbIntakeBarChartCard(
                                     )
                                 }
 
+                                val hasMorning = day.morningCarbs > 0f
+                                val hasAfternoon = day.afternoonCarbs > 0f
+                                val hasEvening = day.eveningCarbs > 0f
+
                                 // 1. 上午段 (暖黄色 0xFFF4A261)
-                                if (day.morningCarbs > 0f) {
+                                if (hasMorning) {
                                     val mTop = chartHeight - mHeight
-                                    drawRoundRect(
+                                    val isTop = !hasAfternoon && !hasEvening
+                                    drawBarSegment(
                                         color = Color(0xFFF4A261),
-                                        topLeft = Offset(left, mTop),
-                                        size = Size(barWidth, mHeight),
-                                        cornerRadius = if (day.afternoonCarbs <= 0f && day.eveningCarbs <= 0f) CornerRadius(cornerRadiusPx, cornerRadiusPx) else CornerRadius(0f, 0f),
+                                        left = left,
+                                        top = mTop,
+                                        width = barWidth,
+                                        height = mHeight,
+                                        isTopSegment = isTop,
+                                        isBottomSegment = true,
+                                        topCornerRadius = cornerRadiusPx,
+                                        bottomCornerRadius = 0f,
                                     )
                                 }
 
                                 // 2. 下午段 (清新绿 HealthPalette.Secondary)
-                                if (day.afternoonCarbs > 0f) {
+                                if (hasAfternoon) {
                                     val aTop = chartHeight - (mHeight + aHeight)
-                                    drawRoundRect(
+                                    val isTop = !hasEvening
+                                    drawBarSegment(
                                         color = HealthPalette.Secondary,
-                                        topLeft = Offset(left, aTop),
-                                        size = Size(barWidth, aHeight),
-                                        cornerRadius = if (day.eveningCarbs <= 0f) CornerRadius(cornerRadiusPx, cornerRadiusPx) else CornerRadius(0f, 0f),
+                                        left = left,
+                                        top = aTop,
+                                        width = barWidth,
+                                        height = aHeight,
+                                        isTopSegment = isTop,
+                                        isBottomSegment = !hasMorning,
+                                        topCornerRadius = cornerRadiusPx,
+                                        bottomCornerRadius = 0f,
                                     )
                                 }
 
                                 // 3. 晚上段 (深夜蓝 0xFF457B9D)
-                                if (day.eveningCarbs > 0f) {
+                                if (hasEvening) {
                                     val eTop = chartHeight - totalHeight
-                                    drawRoundRect(
+                                    val isTop = true
+                                    drawBarSegment(
                                         color = Color(0xFF457B9D),
-                                        topLeft = Offset(left, eTop),
-                                        size = Size(barWidth, eHeight),
-                                        cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
+                                        left = left,
+                                        top = eTop,
+                                        width = barWidth,
+                                        height = eHeight,
+                                        isTopSegment = isTop,
+                                        isBottomSegment = !hasMorning && !hasAfternoon,
+                                        topCornerRadius = cornerRadiusPx,
+                                        bottomCornerRadius = 0f,
                                     )
                                 }
                             }
@@ -1547,15 +1621,42 @@ private fun ModernMealRecordGlassCard(
             }
 
             Box {
-                AsyncImage(
-                    model = images.firstOrNull().orEmpty(),
-                    contentDescription = record.dishName,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(76.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(HealthPalette.chipSurface()),
-                )
+                val firstImage = images.firstOrNull().orEmpty()
+                val imageModel = remember(firstImage) {
+                    if (firstImage.startsWith("/")) File(firstImage) else firstImage
+                }
+                var isImageError by remember(firstImage) { mutableStateOf(false) }
+
+                if (!isImageError && firstImage.isNotBlank()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(imageModel)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = record.dishName,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(76.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(HealthPalette.chipSurface()),
+                        onError = { isImageError = true },
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(76.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(HealthPalette.chipSurface()),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Restaurant,
+                            contentDescription = null,
+                            tint = HealthPalette.textMuted(),
+                            modifier = Modifier.size(28.dp),
+                        )
+                    }
+                }
                 if (images.size > 1) {
                     Surface(
                         shape = RoundedCornerShape(bottomStart = 6.dp, topEnd = 6.dp),

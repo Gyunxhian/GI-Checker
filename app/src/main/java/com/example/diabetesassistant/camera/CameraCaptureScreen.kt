@@ -78,21 +78,20 @@ private val TextDark = Color(0xFF1A2620)
 private val TextMuted = Color(0xFF4A5568)
 
 private fun copyPickedImageToCache(context: android.content.Context, source: Uri): Uri {
-    val dir = File(context.cacheDir, "camera_captures").apply { mkdirs() }
+    val dir = File(context.filesDir, "meal_images").apply { mkdirs() }
     val outFile = File(dir, "picked_${System.currentTimeMillis()}_${(100..999).random()}.jpg")
     context.contentResolver.openInputStream(source)?.use { input ->
         outFile.outputStream().use { output -> input.copyTo(output) }
     } ?: error("无法打开相册图片")
-    return FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.fileprovider",
-        outFile,
-    )
+    return Uri.fromFile(outFile)
 }
 
 private fun createCameraTempUri(context: android.content.Context): Uri {
-    val dir = File(context.cacheDir, "camera_captures").apply { mkdirs() }
+    val dir = File(context.filesDir, "meal_images").apply { mkdirs() }
     val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
+    if (!file.exists()) {
+        file.createNewFile()
+    }
     return FileProvider.getUriForFile(
         context,
         "${context.packageName}.fileprovider",
