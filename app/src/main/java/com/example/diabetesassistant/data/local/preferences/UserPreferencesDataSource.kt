@@ -64,10 +64,10 @@ open class UserPreferencesDataSource @Inject constructor(
     }
 
     /**
-     * 每日目标碳水限额流 (默认 130g)。
+     * 每日目标碳水限额流 (默认 180g 稳健控糖)。
      */
     val dailyCarbTargetFlow: Flow<Float> = dataStore.data.map { prefs ->
-        prefs[PreferencesKeys.DAILY_CARB_TARGET] ?: 130f
+        prefs[PreferencesKeys.DAILY_CARB_TARGET] ?: 180f
     }
 
     /**

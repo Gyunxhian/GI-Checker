@@ -78,25 +78,7 @@ class AnalyzeFoodUseCase @Inject constructor(
         insulinType: InsulinType,
         bloodSugarStart: Float = AlgorithmConstants.DEFAULT_BLOOD_SUGAR_START,
     ): NetworkResult<AnalyzeFoodResult> {
-        val prompt = """
-            你是一位专业的糖尿病营养与代谢专家。请直接分析用户提供的餐盘图片中的所有菜品、汤品与主食。
-            【重要原则】：无需寻找或参考硬币等外置标尺，请直接根据画面中常见餐具、碗盘、蒸笼容器的视觉比例与饱满度，直接判断估算分量。
-            思考过程必须极度精简（50字内迅速确定菜品与分量），思考完成后立即输出合法的标准 JSON，严禁输出任何 Markdown 格式包裹（如 ```json）或说明文字。
-            
-            输出规范与要求：
-            1. 分量判断：直接依据餐具视觉比例，合理估算每道菜与食材的净重（克）。
-            2. 语言规范：所有菜品名称与食材名称必须全部使用标准【中文】。
-            3. 每个食材项必须包含：
-               - name: 中文食材名（例如：“西红柿”、“鸡蛋”、“米饭”、“瘦猪肉”、“西兰花”）
-               - name_en: 对应 USDA 营养库英文检索词（例如：“tomato”、“egg”、“rice”、“pork”、“broccoli”）
-               - category: 分类（仅限："荤" 或 "素"）
-               - weight_g: 估算克重数值（整数或浮点数）
-               - cooking_method: 烹饪方式（仅限中文："炒", "蒸", "煮", "红烧", "爆炒", "油炸", "凉拌", "烤", "煲汤", "白灼", "生食"）
-               - gi_value: 升糖指数预估值（0-100 数值）
-            4. 最多识别 6 道菜品或主食组合。
-            5. 输出格式：
-               {"dishes":[{"dish_name":"中文菜名","ingredients":[{"name":"西红柿","name_en":"tomato","category":"素","weight_g":150,"cooking_method":"炒","gi_value":30}]}]}
-        """.trimIndent()
+        val prompt = FOOD_ANALYSIS_PROMPT
 
         Log.d(TAG, "===== Step 0: AI图像识别 (${imageUrls.size} 张图片) =====")
         return when (val recognized = aiRepository.recognizeDishesJson(imageUrls, prompt)) {
@@ -257,5 +239,31 @@ class AnalyzeFoodUseCase @Inject constructor(
                 ingredientCarbsMap = baseCarbMap,
             ),
         )
+    }
+
+    companion object {
+        val FOOD_ANALYSIS_PROMPT = """
+            你是一位专业的糖尿病营养与代谢专家。请直接分析用户提供的餐盘图片中的所有菜品、汤品与主食。
+            【重要原则】：无需寻找或参考硬币等外置标尺，请直接根据画面中常见餐具、碗盘、蒸笼容器的视觉比例与饱满度，直接判断估算分量。
+            思考过程必须极度精简（50字内迅速确定菜品与分量），思考完成后立即输出合法的标准 JSON，严禁输出任何 Markdown 格式包裹（如 ```json）或说明文字。
+            
+            输出规范与要求：
+            1. 分量判断：直接依据餐具视觉比例，合理估算每道菜与食材的净重（克）。
+            2. 语言规范：所有菜品名称与食材名称必须全部使用标准【中文】。
+            3. 每个食材项必须包含：
+               - name: 中文食材名（例如：“西红柿”、“鸡蛋”、“米饭”、“瘦猪肉”、“西兰花”、“凉粉”、“紫菜”）
+               - name_en: 对应 USDA 营养库英文检索词（例如：“tomato”、“egg”、“rice”、“pork”、“broccoli”、“starch jelly”、“seaweed”）
+               - category: 分类（仅限："荤" 或 "素"）
+               - weight_g: 估算克重数值（整数或浮点数）
+               - cooking_method: 烹饪方式（仅限中文："炒", "蒸", "煮", "红烧", "爆炒", "油炸", "凉拌", "烤", "煲汤", "白灼", "生食"）
+               - gi_value: 升糖指数预估值（0-100 数值）
+            4. 特殊食材估算与检索词规范（极重要，严格执行）：
+               - 汤品干货泡发食材（如紫菜/海带、裙带菜、木耳/黑木耳、银耳、虾皮等）：必须按【泡发前干重当量】或复水熟态合理估算净重（例如一碗普通紫菜蛋花汤中的紫菜干重通常仅 2-5g，切勿按泡水膨胀后重量估算为 30~50g 干紫菜）；对应 name_en 请使用熟食或汤品词（如 "seaweed", "cooked seaweed", "seaweed soup", "wood ear", "wakame"），避免匹配到干制脱水高密度原料。
+               - 高水分淀粉凝胶小吃（如凉粉、凉皮、魔芋/魔芋豆腐、冰粉、米豆腐等）：属于高水分低密度淀粉凝胶（含水量通常在 88%~92%，碳水密度约 8-10%，魔芋类更低仅 2-4%），严禁将其识别或等同于干燥生淀粉；name_en 请使用对应熟食制品词（如 "starch jelly", "liangfen", "cold skin noodle", "grass jelly", "konjac"），严禁使用 "starch" 或 "corn starch" 等干淀粉检索词，避免误按纯生干淀粉(85g/100g碳水)计算。
+               - 熟食主食类（米饭、面条、馒头等）：必须按熟重估算，name_en 明确使用熟主食词（如 "cooked rice", "cooked noodles", "steamed bun"）。
+            5. 最多识别 6 道菜品或主食组合。
+            6. 输出格式：
+               {"dishes":[{"dish_name":"中文菜名","ingredients":[{"name":"西红柿","name_en":"tomato","category":"素","weight_g":150,"cooking_method":"炒","gi_value":30}]}]}
+        """.trimIndent()
     }
 }

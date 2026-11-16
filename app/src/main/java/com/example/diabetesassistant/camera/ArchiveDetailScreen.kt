@@ -80,6 +80,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import java.io.File
+import com.example.diabetesassistant.data.local.BuiltInCarbFallback
 import com.example.diabetesassistant.data.model.DishRecognitionResult
 import com.example.diabetesassistant.data.model.Ingredient
 import com.example.diabetesassistant.data.model.InsulinType
@@ -1017,6 +1018,8 @@ private fun IngredientsBreakdownCard(
                     val isMeat = ingredient.category.contains("meat", ignoreCase = true) || ingredient.category.contains("荤")
                     val badgeColor = if (isMeat) ThresholdElevated else MaterialTheme.colorScheme.primary
                     val usdaCarb = carbMap[ingredient.name]
+                        ?: BuiltInCarbFallback.lookup(ingredient.nameEn ?: "")
+                        ?: BuiltInCarbFallback.lookup(ingredient.name)
 
                     Row(
                         modifier = Modifier

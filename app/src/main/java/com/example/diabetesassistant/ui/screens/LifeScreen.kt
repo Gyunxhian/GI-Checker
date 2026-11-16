@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -489,17 +490,54 @@ fun LifeScreen(
     // 每日碳水目标设置弹窗
     if (showCarbTargetDialog) {
         var tempTarget by remember { mutableStateOf(state.dailyCarbTarget) }
+        val targetInt = tempTarget.toInt()
+
+        val currentTierInfo = when {
+            targetInt >= 240 -> "🟢 日常维持档：适合健康成年人与日常关注人群，推荐每餐约 80~90g"
+            targetInt >= 190 -> "🟡 适度控糖档：适合轻度控糖与防峰人群，推荐每餐约 65~70g"
+            targetInt >= 150 -> "🟠 稳健控糖档：适合常规糖尿病生活管理，推荐每餐约 50g"
+            else -> "🔴 严格临床档：适合临床强化期或极低碳干预，推荐每餐约 35~40g"
+        }
+
         AlertDialog(
             onDismissRequest = { showCarbTargetDialog = false },
             title = { Text("设置每日目标碳水限额", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "当前目标: ${tempTarget.toInt()} 克/天",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "当前目标配额",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    text = "$targetInt 克/天",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = currentTierInfo,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                lineHeight = 16.sp,
+                            )
+                        }
+                    }
+
                     Slider(
                         value = tempTarget,
                         onValueChange = { tempTarget = it },
@@ -514,20 +552,33 @@ fun LifeScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text("50g 严格低碳", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("130g 适度控糖", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        Text("300g", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("50g 极低碳", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("180g 控糖均线", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text("300g 常人标准", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+
+                    Text(
+                        text = "科学预设档位参考：",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold,
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        listOf(100f to "100g 严格", 130f to "130g 适度", 180f to "180g 标准").forEach { (v, lbl) ->
+                        listOf(
+                            130f to "130g 严格",
+                            160f to "160g 稳健",
+                            210f to "210g 适度",
+                            260f to "260g 日常",
+                        ).forEach { (v, lbl) ->
                             FilterChip(
-                                selected = tempTarget.toInt() == v.toInt(),
+                                selected = targetInt == v.toInt(),
                                 onClick = { tempTarget = v },
                                 label = { Text(lbl, fontSize = 11.sp) },
+                                modifier = Modifier.weight(1f),
                             )
                         }
                     }

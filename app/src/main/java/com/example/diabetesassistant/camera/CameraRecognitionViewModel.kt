@@ -219,6 +219,7 @@ class CameraRecognitionViewModel @Inject constructor(
                         focusPeriods = parsed?.focusPeriods ?: emptyList(),
                         reminders = parsed?.reminders ?: emptyList(),
                         recognitionResult = parsed?.recognitionResult,
+                        ingredientCarbsMap = parsed?.ingredientCarbsMap ?: emptyMap(),
                         isLoading = false,
                         error = null,
                     )
@@ -329,6 +330,7 @@ class CameraRecognitionViewModel @Inject constructor(
                 insulinBand = state.insulinBand,
                 focusPeriods = state.focusPeriods,
                 reminders = state.reminders,
+                ingredientCarbsMap = state.ingredientCarbsMap,
             )
         )
     }

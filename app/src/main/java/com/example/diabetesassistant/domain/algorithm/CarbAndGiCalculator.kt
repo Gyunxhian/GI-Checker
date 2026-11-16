@@ -88,9 +88,10 @@ class CarbAndGiCalculator @Inject constructor() {
     ): Float {
         val ratio = meatRatio.coerceIn(0f, 1f)
         val intake = intakePercent.coerceIn(0f, 1f)
-        val carbsPerGram =
-            summary.vegetable.carbsPerGram * (1f - ratio) + summary.meat.carbsPerGram * ratio
-        return carbsPerGram * intake * summary.totalWeightG
+        val vegFactor = (2f * (1f - ratio)).coerceIn(0f, 1f)
+        val meatFactor = (2f * ratio).coerceIn(0f, 1f)
+        val netCarbs = summary.vegetable.totalCarbsG * vegFactor + summary.meat.totalCarbsG * meatFactor
+        return netCarbs * intake
     }
 
     /**

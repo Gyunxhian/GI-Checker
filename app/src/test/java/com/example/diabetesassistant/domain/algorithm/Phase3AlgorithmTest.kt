@@ -57,7 +57,9 @@ class Phase3AlgorithmTest {
 
         val intake = calculator.calculateTotalCarbIntake(summary, meatRatio = 0.5f, intakePercent = 0.6f)
 
-        val expected = ((18.6f / 165f) * 0.5f + (3.1f / 100f) * 0.5f) * 0.6f * 265f
+        // meatRatio = 0.5f -> vegFactor = 1.0f, meatFactor = 1.0f -> netCarbs = 18.6f + 3.1f = 21.7f
+        // intakePercent = 0.6f -> expected = 21.7f * 0.6f = 13.02f
+        val expected = (18.6f + 3.1f) * 0.6f
         assertEquals(expected, intake, 0.0001f)
     }
 

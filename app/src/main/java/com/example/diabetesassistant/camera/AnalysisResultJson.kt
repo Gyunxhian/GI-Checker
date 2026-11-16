@@ -20,4 +20,5 @@ data class AnalysisResultJson(
     val insulinBand: InsulinBandResult? = null,
     val focusPeriods: List<FocusPeriod>? = null,
     val reminders: List<String>? = null,
+    val ingredientCarbsMap: Map<String, Float>? = null,
 )
