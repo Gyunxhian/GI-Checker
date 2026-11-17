@@ -58,6 +58,14 @@ class AnalyzeFoodPromptTest {
     }
 
     @Test
+    fun foodAnalysisPrompt_containsBingfenGuidanceAndDistinction() {
+        val prompt = AnalyzeFoodUseCase.FOOD_ANALYSIS_PROMPT
+        assertTrue("Prompt must instruct recognizing 冰粉", prompt.contains("冰粉"))
+        assertTrue("Prompt must distinguish 冰粉 as mostly water", prompt.contains("水分") || prompt.contains("水"))
+        assertTrue("Prompt must separate 冰粉 and 红糖", prompt.contains("红糖") && prompt.contains("bingfen"))
+    }
+
+    @Test
     fun foodAnalysisPrompt_specifiesJsonContractAndFields() {
         val prompt = AnalyzeFoodUseCase.FOOD_ANALYSIS_PROMPT
 

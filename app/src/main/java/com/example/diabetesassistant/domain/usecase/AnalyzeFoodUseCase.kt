@@ -138,10 +138,9 @@ class AnalyzeFoodUseCase @Inject constructor(
         Log.i(TAG, "[Step 1 USDA请求] 查询食材基础碳水 (${ingredients.size} 个并行请求)...")
         val baseCarbDeferred = ingredients.map { ingredient ->
             async {
-                val queryKey = ingredient.nameEn?.takeIf { it.isNotBlank() } ?: ingredient.name
-                val carbRes = nutritionRepository.getCarbsPer100g(queryKey)
+                val carbRes = nutritionRepository.getCarbsPer100g(ingredient.name, ingredient.nameEn)
                 val carbDisplay = if (carbRes is NetworkResult.Success) "${carbRes.data}g/100g" else "查询失败"
-                Log.i(TAG, "[Step 1 USDA结果] 食材 '${ingredient.name}' (检索词: '$queryKey') -> $carbDisplay")
+                Log.i(TAG, "[Step 1 成分结果] 食材 '${ingredient.name}' (英文: '${ingredient.nameEn}') -> $carbDisplay")
                 ingredient.name to carbRes
             }
         }.awaitAll()
@@ -243,7 +242,7 @@ class AnalyzeFoodUseCase @Inject constructor(
 
     companion object {
         val FOOD_ANALYSIS_PROMPT = """
-            你是一位专业的糖尿病营养与代谢专家。请直接分析用户提供的餐盘图片中的所有菜品、汤品与主食。
+            你是一位专业的糖尿病营养与代谢专家。请直接分析用户提供的餐盘图片中的所有菜品、汤品、甜品与主食。
             【重要原则】：无需寻找或参考硬币等外置标尺，请直接根据画面中常见餐具、碗盘、蒸笼容器的视觉比例与饱满度，直接判断估算分量。
             思考过程必须极度精简（50字内迅速确定菜品与分量），思考完成后立即输出合法的标准 JSON，严禁输出任何 Markdown 格式包裹（如 ```json）或说明文字。
             
@@ -251,16 +250,27 @@ class AnalyzeFoodUseCase @Inject constructor(
             1. 分量判断：直接依据餐具视觉比例，合理估算每道菜与食材的净重（克）。
             2. 语言规范：所有菜品名称与食材名称必须全部使用标准【中文】。
             3. 每个食材项必须包含：
-               - name: 中文食材名（例如：“西红柿”、“鸡蛋”、“米饭”、“瘦猪肉”、“西兰花”、“凉粉”、“紫菜”）
-               - name_en: 对应 USDA 营养库英文检索词（例如：“tomato”、“egg”、“rice”、“pork”、“broccoli”、“starch jelly”、“seaweed”）
+               - name: 中文食材名（例如：“西红柿”、“鸡蛋”、“米饭”、“瘦猪肉”、“西兰花”、“冰粉”、“红糖”、“紫菜”）
+               - name_en: 对应 USDA/营养库英文检索词（例如：“tomato”、“whole egg”、“cooked rice”、“pork”、“broccoli”、“bingfen”、“brown sugar”、“cooked seaweed”）
                - category: 分类（仅限："荤" 或 "素"）
                - weight_g: 估算克重数值（整数或浮点数）
                - cooking_method: 烹饪方式（仅限中文："炒", "蒸", "煮", "红烧", "爆炒", "油炸", "凉拌", "烤", "煲汤", "白灼", "生食"）
                - gi_value: 升糖指数预估值（0-100 数值）
-            4. 特殊食材估算与检索词规范（极重要，严格执行）：
-               - 汤品干货泡发食材（如紫菜/海带、裙带菜、木耳/黑木耳、银耳、虾皮等）：必须按【泡发前干重当量】或复水熟态合理估算净重（例如一碗普通紫菜蛋花汤中的紫菜干重通常仅 2-5g，切勿按泡水膨胀后重量估算为 30~50g 干紫菜）；对应 name_en 请使用熟食或汤品词（如 "seaweed", "cooked seaweed", "seaweed soup", "wood ear", "wakame"），避免匹配到干制脱水高密度原料。
-               - 高水分淀粉凝胶小吃（如凉粉、凉皮、魔芋/魔芋豆腐、冰粉、米豆腐等）：属于高水分低密度淀粉凝胶（含水量通常在 88%~92%，碳水密度约 8-10%，魔芋类更低仅 2-4%），严禁将其识别或等同于干燥生淀粉；name_en 请使用对应熟食制品词（如 "starch jelly", "liangfen", "cold skin noodle", "grass jelly", "konjac"），严禁使用 "starch" 或 "corn starch" 等干淀粉检索词，避免误按纯生干淀粉(85g/100g碳水)计算。
-               - 熟食主食类（米饭、面条、馒头等）：必须按熟重估算，name_en 明确使用熟主食词（如 "cooked rice", "cooked noodles", "steamed bun"）。
+            4. 特殊食材精准辨识与检索规范（极重要，严格执行）：
+               - 【冰粉（手搓冰粉、红糖冰粉）辨识规范（极高优先级）】：
+                 若画面中为透明或晶莹剔透如果汁冻的胶状凝胶块、泡在红糖水或深浅色甜汤汁中、或带有碎冰块/勺子/小料（葡萄干、山楂碎、花生碎等），这是典型的夏日甜品【冰粉】（主料由植物假酸浆籽果胶或魔芋卡拉胶制成，【99%绝大多数都是水分】！纯冰粉本身几乎无碳水，每100g碳水仅1.5g，升糖指数低）。
+                 必须准确命名菜品为“红糖冰粉”或“冰粉”，绝不可误判为咸味凉粉！
+                 食材必须拆分为：
+                   1) name: "冰粉", name_en: "bingfen", category: "素", weight_g: 150~200, cooking_method: "生食", gi_value: 15
+                   2) name: "红糖", name_en: "brown sugar", category: "素", weight_g: 10~15, cooking_method: "煮", gi_value: 65
+               - 【凉粉/凉皮（咸辣小吃）】：
+                 仅当画面中为带有辣椒红油、蒜泥、生抽、黄瓜丝等咸辣佐料的块状/条状凝胶时，才属于咸食正餐“凉粉”或“凉皮”，含水量达90%，碳水密度约8-10%，食材 name 设为“凉粉”，name_en 设为“liangfen”或“starch jelly”，严禁使用生淀粉（corn starch）词汇。
+               - 【禽蛋类食材】：
+                 鸡蛋、蛋花汤、荷包蛋等，鲜鸡蛋碳水仅 ~1g/100g，name: "鸡蛋", name_en: "whole egg" 或 "fresh egg"，严禁使用易被误识别为挂面的词。
+               - 【汤品干货泡发食材（紫菜/海带、裙带菜、木耳、虾皮等）】：
+                 必须按【泡发前干重当量】估算（例如一碗普通紫菜蛋花汤中的紫菜干重通常仅 2-5g，切勿按泡水膨胀后重量估算为几十克干紫菜）；name_en 使用 "cooked seaweed" 或 "seaweed soup"。
+               - 【熟食主食类（米饭、面条、馒头等）】：
+                 必须按熟重估算，name_en 明确使用熟主食词（如 "cooked rice", "cooked noodles", "steamed bun"）。
             5. 最多识别 6 道菜品或主食组合。
             6. 输出格式：
                {"dishes":[{"dish_name":"中文菜名","ingredients":[{"name":"西红柿","name_en":"tomato","category":"素","weight_g":150,"cooking_method":"炒","gi_value":30}]}]}

@@ -8,10 +8,12 @@ package com.example.diabetesassistant.data.local
  */
 object BuiltInCarbFallback {
     private val table: Map<String, Float> = mapOf(
-        // === 中文高水分淀粉凝胶与小吃 ===
-        "凉粉" to 9.2f, "川味凉粉" to 9.2f, "凉皮" to 11.5f, "陕西凉皮" to 11.5f,
+        // === 中文高水分天然与淀粉凝胶、小吃（绝大多数为水） ===
+        "冰粉" to 1.5f, "手搓冰粉" to 1.5f, "红糖冰粉" to 7.0f, "白凉粉" to 2.5f,
+        "爱玉" to 1.5f, "爱玉冻" to 1.5f, "烧仙草" to 3.0f, "仙草冻" to 3.0f, "黑凉粉" to 3.0f,
+        "凉粉" to 9.2f, "川味凉粉" to 9.2f, "红糖凉粉" to 15.0f, "凉皮" to 11.5f, "陕西凉皮" to 11.5f,
         "魔芋" to 2.2f, "魔芋豆腐" to 2.2f, "魔芋丝" to 2.2f, "魔芋结" to 2.2f, "魔芋爽" to 4.5f,
-        "冰粉" to 2.5f, "米豆腐" to 12.0f, "仙草" to 3.0f, "龟苓膏" to 4.0f,
+        "米豆腐" to 12.0f, "仙草" to 3.0f, "龟苓膏" to 4.0f, "果冻" to 12.0f,
         "粉皮" to 12.0f, "拉皮" to 11.0f, "东北拉皮" to 11.0f,
 
         // === 中文汤品与泡发干货 ===
@@ -61,10 +63,11 @@ object BuiltInCarbFallback {
         "牛奶" to 5.0f, "酸奶" to 7.0f, "无糖酸奶" to 3.5f, "芝士" to 1.3f, "黄油" to 0.1f,
 
         // === High-Moisture Gels (English) ===
+        "bingfen" to 1.5f, "ice jelly" to 1.5f, "aiyu" to 1.5f, "aiyu jelly" to 1.5f,
         "starch jelly" to 9.2f, "liangfen" to 9.2f,
         "cold skin noodle" to 11.5f, "cold skin noodles" to 11.5f, "liangpi" to 11.5f,
         "konjac" to 2.2f, "konjac tofu" to 2.2f, "konjac jelly" to 2.2f, "konjac snack" to 4.5f, "shirataki" to 2.2f,
-        "bingfen" to 2.5f, "ice jelly" to 2.5f, "rice tofu" to 12.0f, "grass jelly" to 3.0f,
+        "rice tofu" to 12.0f, "grass jelly" to 3.0f, "herbal jelly" to 3.0f, "guilinggao" to 4.0f, "jelly" to 12.0f,
         "fenpi" to 12.0f, "lapi" to 11.0f,
 
         // === Soups & Soaked Dried Goods (English) ===
@@ -93,7 +96,8 @@ object BuiltInCarbFallback {
         "green pepper pork" to 4.5f, "pork belly" to 0.0f, "pork" to 0f, "lean pork" to 0f, "ribs" to 0f,
         "beef" to 0f, "beef brisket" to 0f, "lamb" to 0f, "chicken" to 0f, "chicken breast" to 0f,
         "chicken wing" to 0f, "chicken leg" to 0f, "duck" to 0f, "fish" to 0f, "salmon" to 0f, "sea bass" to 0f,
-        "shrimp" to 0.2f, "prawn" to 0.2f, "crab" to 0f, "egg" to 1.1f, "duck egg" to 0.8f,
+        "shrimp" to 0.2f, "prawn" to 0.2f, "crab" to 0f,
+        "egg" to 1.1f, "whole egg" to 1.1f, "fresh egg" to 1.1f, "boiled egg" to 1.1f, "fried egg" to 1.5f, "poached egg" to 1.2f, "duck egg" to 0.8f,
 
         // === Vegetables (English fallback) ===
         "tomato" to 3.9f, "potato" to 17.5f, "carrot" to 10.0f, "broccoli" to 6.6f,

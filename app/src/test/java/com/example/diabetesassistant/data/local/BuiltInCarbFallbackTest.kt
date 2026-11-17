@@ -21,7 +21,8 @@ class BuiltInCarbFallbackTest {
         assertEquals(11.5f, BuiltInCarbFallback.lookup("凉皮")!!, 0.001f)
         assertEquals(2.2f, BuiltInCarbFallback.lookup("魔芋")!!, 0.001f)
         assertEquals(2.2f, BuiltInCarbFallback.lookup("魔芋豆腐")!!, 0.001f)
-        assertEquals(2.5f, BuiltInCarbFallback.lookup("冰粉")!!, 0.001f)
+        assertEquals(1.5f, BuiltInCarbFallback.lookup("冰粉")!!, 0.001f)
+        assertEquals(1.5f, BuiltInCarbFallback.lookup("手搓冰粉")!!, 0.001f)
         assertEquals(12.0f, BuiltInCarbFallback.lookup("米豆腐")!!, 0.001f)
     }
 
@@ -60,8 +61,8 @@ class BuiltInCarbFallbackTest {
         assertEquals(11.5f, BuiltInCarbFallback.lookup("cold skin noodle")!!, 0.001f)
         assertEquals(11.5f, BuiltInCarbFallback.lookup("liangpi")!!, 0.001f)
         assertEquals(2.2f, BuiltInCarbFallback.lookup("konjac")!!, 0.001f)
-        assertEquals(2.5f, BuiltInCarbFallback.lookup("ice jelly")!!, 0.001f)
-        assertEquals(2.5f, BuiltInCarbFallback.lookup("bingfen")!!, 0.001f)
+        assertEquals(1.5f, BuiltInCarbFallback.lookup("ice jelly")!!, 0.001f)
+        assertEquals(1.5f, BuiltInCarbFallback.lookup("bingfen")!!, 0.001f)
         assertEquals(1.5f, BuiltInCarbFallback.lookup("seaweed egg drop soup")!!, 0.001f)
         assertEquals(1.5f, BuiltInCarbFallback.lookup("seaweed soup")!!, 0.001f)
         assertEquals(5.3f, BuiltInCarbFallback.lookup("cooked seaweed")!!, 0.001f)

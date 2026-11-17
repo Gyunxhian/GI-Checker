@@ -1017,9 +1017,11 @@ private fun IngredientsBreakdownCard(
                 dish.ingredients.forEach { ingredient ->
                     val isMeat = ingredient.category.contains("meat", ignoreCase = true) || ingredient.category.contains("荤")
                     val badgeColor = if (isMeat) ThresholdElevated else MaterialTheme.colorScheme.primary
-                    val usdaCarb = carbMap[ingredient.name]
+                    // 权威中餐成分库优先匹配，防御历史异常值（如鸡蛋 57.7g、凉粉 98.9g、紫菜 52.4g）
+                    val localStandard = BuiltInCarbFallback.lookup(ingredient.name)
                         ?: BuiltInCarbFallback.lookup(ingredient.nameEn ?: "")
-                        ?: BuiltInCarbFallback.lookup(ingredient.name)
+                    val rawCarb = carbMap[ingredient.name]
+                    val usdaCarb = localStandard ?: rawCarb
 
                     Row(
                         modifier = Modifier

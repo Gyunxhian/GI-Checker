@@ -5,6 +5,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.diabetesassistant.data.local.BuiltInCarbFallback
 import com.example.diabetesassistant.data.local.entity.FoodRecord
 import com.example.diabetesassistant.data.local.entity.FoodRecordStatus
 import com.example.diabetesassistant.data.model.DishRecognitionResult
@@ -225,6 +226,19 @@ class CameraRecognitionViewModel @Inject constructor(
                     )
                 }
                 Log.i(TAG, "已加载真实档案: id=$recordId, carb=${parsed?.totalCarbIntake}g")
+                val ingredients = parsed?.recognitionResult?.dishes?.flatMap { it.ingredients } ?: emptyList()
+                val needsHealing = ingredients.any { ingredient ->
+                    val cleanName = ingredient.name.trim().lowercase()
+                    val cleanEn = ingredient.nameEn?.trim()?.lowercase()
+                    val localCarb: Float? = BuiltInCarbFallback.lookup(cleanName)
+                        ?: if (!cleanEn.isNullOrBlank()) BuiltInCarbFallback.lookup(cleanEn) else null
+                    val saved: Float? = parsed?.ingredientCarbsMap?.get(ingredient.name)
+                    localCarb != null && saved != null && kotlin.math.abs(localCarb - saved) > 3.0f
+                }
+                if (needsHealing) {
+                    Log.i(TAG, "检测到历史记录存在异常碳水偏差 (如鸡蛋/凉粉/紫菜历史脏数据)，启动自动校准重算...")
+                    runRecalculation()
+                }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.e(TAG, "加载档案异常: ${e.message}", e)
@@ -364,17 +378,33 @@ class CameraRecognitionViewModel @Inject constructor(
             )) {
                 is NetworkResult.Success -> {
                     Log.i(TAG, "重算完成: carb=${result.data.totalCarbIntake}g, GI=${result.data.weightedGi}")
-                    _uiState.update {
-                        it.copy(isRecalculating = false, error = null,
-                            totalCarbIntake = result.data.totalCarbIntake,
-                            weightedGi = result.data.weightedGi,
-                            bloodSugarPrediction = result.data.bloodSugarPrediction,
-                            insulinBand = result.data.insulinBand,
-                            focusPeriods = result.data.focusPeriods,
-                            reminders = result.data.reminders,
-                            recognitionResult = result.data.recognitionResult,
-                            ingredientCarbsMap = result.data.ingredientCarbsMap,
-                        )
+                    val updatedState = _uiState.value.copy(
+                        isRecalculating = false,
+                        error = null,
+                        totalCarbIntake = result.data.totalCarbIntake,
+                        weightedGi = result.data.weightedGi,
+                        bloodSugarPrediction = result.data.bloodSugarPrediction,
+                        insulinBand = result.data.insulinBand,
+                        focusPeriods = result.data.focusPeriods,
+                        reminders = result.data.reminders,
+                        recognitionResult = result.data.recognitionResult,
+                        ingredientCarbsMap = result.data.ingredientCarbsMap,
+                    )
+                    _uiState.value = updatedState
+
+                    val existingId = updatedState.savedFoodRecordId
+                    if (existingId != null) {
+                        try {
+                            val originalRecord = foodRecordRepository.getById(existingId)
+                            if (originalRecord != null) {
+                                val healedJson = buildSaveJson(updatedState)
+                                val updatedRecord = originalRecord.copy(aiJson = healedJson)
+                                foodRecordRepository.update(updatedRecord)
+                                Log.i(TAG, "已自动同步校准档案库记录: id=$existingId, carb=${result.data.totalCarbIntake}g")
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "自动同步校准持久化失败: ${e.message}")
+                        }
                     }
                 }
                 is NetworkResult.Error -> {
