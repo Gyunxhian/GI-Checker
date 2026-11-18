@@ -52,7 +52,26 @@ class AnalyzeFoodUseCase @Inject constructor(
     private val gson = Gson()
 
     /**
-     * 执行完整餐食分析流程（单图重载）。
+     * 执行完整餐食分析流程（单图重载，211 三元组分模型）。
+     */
+    suspend operator fun invoke(
+        imageUrl: String,
+        stapleIntake: Float = 1.0f,
+        vegIntake: Float = 1.0f,
+        meatIntake: Float = 1.0f,
+        insulinType: InsulinType,
+        bloodSugarStart: Float = AlgorithmConstants.DEFAULT_BLOOD_SUGAR_START,
+    ): NetworkResult<AnalyzeFoodResult> = invoke(
+        imageUrls = listOf(imageUrl),
+        stapleIntake = stapleIntake,
+        vegIntake = vegIntake,
+        meatIntake = meatIntake,
+        insulinType = insulinType,
+        bloodSugarStart = bloodSugarStart,
+    )
+
+    /**
+     * 执行完整餐食分析流程（单图重载，向后兼容旧二元荤素比）。
      */
     suspend operator fun invoke(
         imageUrl: String,
@@ -69,12 +88,13 @@ class AnalyzeFoodUseCase @Inject constructor(
     )
 
     /**
-     * 执行完整餐食分析流程（多图整餐整合）。
+     * 执行完整餐食分析流程（多图整餐整合，211 三元组分模型）。
      */
     suspend operator fun invoke(
         imageUrls: List<String>,
-        meatRatio: Float,
-        intakePercent: Float,
+        stapleIntake: Float = 1.0f,
+        vegIntake: Float = 1.0f,
+        meatIntake: Float = 1.0f,
         insulinType: InsulinType,
         bloodSugarStart: Float = AlgorithmConstants.DEFAULT_BLOOD_SUGAR_START,
     ): NetworkResult<AnalyzeFoodResult> {
@@ -94,8 +114,9 @@ class AnalyzeFoodUseCase @Inject constructor(
                 } else {
                     analyzeParsedResult(
                         recognitionResult = parsed,
-                        meatRatio = meatRatio,
-                        intakePercent = intakePercent,
+                        stapleIntake = stapleIntake,
+                        vegIntake = vegIntake,
+                        meatIntake = meatIntake,
                         insulinType = insulinType,
                         bloodSugarStart = bloodSugarStart,
                     )
@@ -105,6 +126,47 @@ class AnalyzeFoodUseCase @Inject constructor(
         }
     }
 
+    /**
+     * 执行完整餐食分析流程（多图整餐整合，向后兼容旧二元荤素比）。
+     */
+    suspend operator fun invoke(
+        imageUrls: List<String>,
+        meatRatio: Float,
+        intakePercent: Float,
+        insulinType: InsulinType,
+        bloodSugarStart: Float = AlgorithmConstants.DEFAULT_BLOOD_SUGAR_START,
+    ): NetworkResult<AnalyzeFoodResult> {
+        val s = intakePercent
+        val v = ((2f * (1f - meatRatio.coerceIn(0f, 1f))).coerceIn(0f, 1f) * intakePercent.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+        val m = ((2f * meatRatio.coerceIn(0f, 1f)).coerceIn(0f, 1f) * intakePercent.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+        return invoke(
+            imageUrls = imageUrls,
+            stapleIntake = s,
+            vegIntake = v,
+            meatIntake = m,
+            insulinType = insulinType,
+            bloodSugarStart = bloodSugarStart,
+        )
+    }
+
+    suspend fun recalculate(
+        recognitionResult: DishRecognitionResult,
+        stapleIntake: Float = 1.0f,
+        vegIntake: Float = 1.0f,
+        meatIntake: Float = 1.0f,
+        insulinType: InsulinType,
+        bloodSugarStart: Float,
+    ): NetworkResult<AnalyzeFoodResult> {
+        return analyzeParsedResult(
+            recognitionResult = recognitionResult,
+            stapleIntake = stapleIntake,
+            vegIntake = vegIntake,
+            meatIntake = meatIntake,
+            insulinType = insulinType,
+            bloodSugarStart = bloodSugarStart,
+        )
+    }
+
     suspend fun recalculate(
         recognitionResult: DishRecognitionResult,
         meatRatio: Float,
@@ -112,10 +174,14 @@ class AnalyzeFoodUseCase @Inject constructor(
         insulinType: InsulinType,
         bloodSugarStart: Float,
     ): NetworkResult<AnalyzeFoodResult> {
+        val s = intakePercent
+        val v = ((2f * (1f - meatRatio.coerceIn(0f, 1f))).coerceIn(0f, 1f) * intakePercent.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+        val m = ((2f * meatRatio.coerceIn(0f, 1f)).coerceIn(0f, 1f) * intakePercent.coerceIn(0f, 1f)).coerceIn(0f, 1f)
         return analyzeParsedResult(
             recognitionResult = recognitionResult,
-            meatRatio = meatRatio,
-            intakePercent = intakePercent,
+            stapleIntake = s,
+            vegIntake = v,
+            meatIntake = m,
             insulinType = insulinType,
             bloodSugarStart = bloodSugarStart,
         )
@@ -125,6 +191,27 @@ class AnalyzeFoodUseCase @Inject constructor(
         recognitionResult: DishRecognitionResult,
         meatRatio: Float,
         intakePercent: Float,
+        insulinType: InsulinType,
+        bloodSugarStart: Float,
+    ): NetworkResult<AnalyzeFoodResult> {
+        val s = intakePercent
+        val v = ((2f * (1f - meatRatio.coerceIn(0f, 1f))).coerceIn(0f, 1f) * intakePercent.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+        val m = ((2f * meatRatio.coerceIn(0f, 1f)).coerceIn(0f, 1f) * intakePercent.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+        return analyzeParsedResult(
+            recognitionResult = recognitionResult,
+            stapleIntake = s,
+            vegIntake = v,
+            meatIntake = m,
+            insulinType = insulinType,
+            bloodSugarStart = bloodSugarStart,
+        )
+    }
+
+    suspend fun analyzeParsedResult(
+        recognitionResult: DishRecognitionResult,
+        stapleIntake: Float = 1.0f,
+        vegIntake: Float = 1.0f,
+        meatIntake: Float = 1.0f,
         insulinType: InsulinType,
         bloodSugarStart: Float,
     ): NetworkResult<AnalyzeFoodResult> = coroutineScope {
@@ -169,16 +256,22 @@ class AnalyzeFoodUseCase @Inject constructor(
             cookingCorrectionsPer100g = correctionMap,
         )
         val summary = carbAndGiCalculator.summarizeByCategory(details)
-        Log.i(TAG, "[Step 2 荤素汇总] 素: ${summary.vegetable.carbsPerGram}g/g, 荤: ${summary.meat.carbsPerGram}g/g")
+        Log.i(TAG, "[Step 2 三元组分汇总] 主食: ${summary.staple.totalCarbsG}g, 素: ${summary.vegetable.totalCarbsG}g, 荤: ${summary.meat.totalCarbsG}g")
 
         val totalCarbIntake = carbAndGiCalculator.calculateTotalCarbIntake(
             summary = summary,
-            meatRatio = meatRatio,
-            intakePercent = intakePercent,
+            stapleIntake = stapleIntake,
+            vegIntake = vegIntake,
+            meatIntake = meatIntake,
         )
-        Log.i(TAG, "[Step 3 综合计算] 实际摄入碳水: ${totalCarbIntake}g (荤素比: $meatRatio, 摄入比: $intakePercent)")
+        Log.i(TAG, "[Step 3 综合计算] 实际摄入碳水: ${totalCarbIntake}g (主食: $stapleIntake, 蔬菜: $vegIntake, 荤菜: $meatIntake)")
 
-        val weightedGi = carbAndGiCalculator.calculateWeightedGi(details)
+        val weightedGi = carbAndGiCalculator.calculateWeightedGi(
+            details = details,
+            stapleIntake = stapleIntake,
+            vegIntake = vegIntake,
+            meatIntake = meatIntake,
+        )
         Log.i(TAG, "[Step 4 加权GI] 加权GI: $weightedGi")
 
         val prediction = bloodSugarPredictor.predict(
@@ -252,7 +345,7 @@ class AnalyzeFoodUseCase @Inject constructor(
             3. 每个食材项必须包含：
                - name: 中文食材名（例如：“西红柿”、“鸡蛋”、“米饭”、“瘦猪肉”、“西兰花”、“冰粉”、“红糖”、“紫菜”）
                - name_en: 对应 USDA/营养库英文检索词（例如：“tomato”、“whole egg”、“cooked rice”、“pork”、“broccoli”、“bingfen”、“brown sugar”、“cooked seaweed”）
-               - category: 分类（仅限："荤" 或 "素"）
+               - category: 分类（仅限三类："主食"、"素" 或 "荤"；米面杂粮、土豆红薯淀粉根茎等高碳水高GI食物归入"主食"，绿叶蔬菜瓜果菌菇归入"素"，肉类水产蛋类归入"荤"）
                - weight_g: 估算克重数值（整数或浮点数）
                - cooking_method: 烹饪方式（仅限中文："炒", "蒸", "煮", "红烧", "爆炒", "油炸", "凉拌", "烤", "煲汤", "白灼", "生食"）
                - gi_value: 升糖指数预估值（0-100 数值）

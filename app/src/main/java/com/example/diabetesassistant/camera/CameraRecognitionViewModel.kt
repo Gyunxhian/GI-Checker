@@ -45,8 +45,11 @@ data class ArchiveDetailUiState(
     val insulinBand: InsulinBandResult? = null,
     val focusPeriods: List<FocusPeriod> = emptyList(),
     val reminders: List<String> = emptyList(),
+    val stapleIntake: Float = 1.0f,
+    val vegIntake: Float = 1.0f,
+    val meatIntake: Float = 1.0f,
     val meatRatio: Float = 0.5f,
-    val intakePercent: Float = 0.6f,
+    val intakePercent: Float = 1.0f,
     val bloodSugarStart: Float = 5.0f,
     val insulinType: InsulinType = InsulinType.RAPID,
     val savedFoodRecordId: Long? = null,
@@ -114,8 +117,9 @@ class CameraRecognitionViewModel @Inject constructor(
         try {
             when (val result = analyzeFoodUseCase(
                 imageUrls = images,
-                meatRatio = state.meatRatio,
-                intakePercent = state.intakePercent,
+                stapleIntake = state.stapleIntake,
+                vegIntake = state.vegIntake,
+                meatIntake = state.meatIntake,
                 insulinType = state.insulinType,
                 bloodSugarStart = state.bloodSugarStart,
             )) {
@@ -148,11 +152,38 @@ class CameraRecognitionViewModel @Inject constructor(
         }
     }
 
+    fun updateStapleIntake(intake: Float) {
+        val clamped = intake.coerceIn(0f, 1f)
+        if (clamped == _uiState.value.stapleIntake) return
+        Log.i(TAG, "主食摄入变更: $clamped")
+        _uiState.update { it.copy(stapleIntake = clamped) }
+        debounceRecalculation()
+    }
+
+    fun updateVegIntake(intake: Float) {
+        val clamped = intake.coerceIn(0f, 1f)
+        if (clamped == _uiState.value.vegIntake) return
+        Log.i(TAG, "蔬菜摄入变更: $clamped")
+        _uiState.update { it.copy(vegIntake = clamped) }
+        debounceRecalculation()
+    }
+
+    fun updateMeatIntake(intake: Float) {
+        val clamped = intake.coerceIn(0f, 1f)
+        if (clamped == _uiState.value.meatIntake) return
+        Log.i(TAG, "荤菜摄入变更: $clamped")
+        _uiState.update { it.copy(meatIntake = clamped) }
+        debounceRecalculation()
+    }
+
     fun updateMeatRatio(ratio: Float) {
         val clamped = ratio.coerceIn(0f, 1f)
         if (clamped == _uiState.value.meatRatio) return
         Log.i(TAG, "荤素比变更: $clamped")
-        _uiState.update { it.copy(meatRatio = clamped) }
+        val currentIntake = _uiState.value.intakePercent
+        val v = ((2f * (1f - clamped)).coerceIn(0f, 1f) * currentIntake).coerceIn(0f, 1f)
+        val m = ((2f * clamped).coerceIn(0f, 1f) * currentIntake).coerceIn(0f, 1f)
+        _uiState.update { it.copy(meatRatio = clamped, vegIntake = v, meatIntake = m) }
         debounceRecalculation()
     }
 
@@ -160,7 +191,10 @@ class CameraRecognitionViewModel @Inject constructor(
         val clamped = percent.coerceIn(0f, 1f)
         if (clamped == _uiState.value.intakePercent) return
         Log.i(TAG, "摄入比变更: $clamped")
-        _uiState.update { it.copy(intakePercent = clamped) }
+        val mRatio = _uiState.value.meatRatio
+        val v = ((2f * (1f - mRatio)).coerceIn(0f, 1f) * clamped).coerceIn(0f, 1f)
+        val m = ((2f * mRatio).coerceIn(0f, 1f) * clamped).coerceIn(0f, 1f)
+        _uiState.update { it.copy(intakePercent = clamped, stapleIntake = clamped, vegIntake = v, meatIntake = m) }
         debounceRecalculation()
     }
 
@@ -176,6 +210,10 @@ class CameraRecognitionViewModel @Inject constructor(
         if (type == _uiState.value.insulinType) return
         Log.i(TAG, "胰岛素类型变更: $type")
         _uiState.update { it.copy(insulinType = type) }
+        debounceRecalculation()
+    }
+
+    fun recalculateMetabolism() {
         debounceRecalculation()
     }
 
@@ -198,8 +236,11 @@ class CameraRecognitionViewModel @Inject constructor(
                         recordDate = record.recordDate,
                         totalCarbIntake = parsed?.totalCarbIntake ?: 0f,
                         weightedGi = parsed?.weightedGi ?: 0f,
+                        stapleIntake = parsed?.effectiveStapleIntake ?: 1.0f,
+                        vegIntake = parsed?.effectiveVegIntake ?: 1.0f,
+                        meatIntake = parsed?.effectiveMeatIntake ?: 1.0f,
                         meatRatio = parsed?.meatRatio ?: 0.5f,
-                        intakePercent = parsed?.intakePercent ?: 0.6f,
+                        intakePercent = parsed?.intakePercent ?: 1.0f,
                         bloodSugarStart = parsed?.bloodSugarStart ?: 5.0f,
                         insulinType = try {
                             InsulinType.valueOf(parsed?.insulinType ?: "RAPID")
@@ -337,6 +378,9 @@ class CameraRecognitionViewModel @Inject constructor(
                 weightedGi = state.weightedGi,
                 meatRatio = state.meatRatio,
                 intakePercent = state.intakePercent,
+                stapleIntake = state.stapleIntake,
+                vegIntake = state.vegIntake,
+                meatIntake = state.meatIntake,
                 insulinType = state.insulinType.name,
                 bloodSugarStart = state.bloodSugarStart,
                 recognitionResult = cachedRecognitionResult,
@@ -362,17 +406,19 @@ class CameraRecognitionViewModel @Inject constructor(
             Log.w(TAG, "重算跳过: 无缓存识别结果")
             return
         }
-        val currentMeatRatio = _uiState.value.meatRatio
-        val currentIntakePercent = _uiState.value.intakePercent
+        val currentStaple = _uiState.value.stapleIntake
+        val currentVeg = _uiState.value.vegIntake
+        val currentMeat = _uiState.value.meatIntake
         val currentBloodSugar = _uiState.value.bloodSugarStart
-        Log.i(TAG, "===== 重算: meatRatio=$currentMeatRatio, intake=$currentIntakePercent, bg=$currentBloodSugar =====")
+        Log.i(TAG, "===== 211三元组分重算: staple=$currentStaple, veg=$currentVeg, meat=$currentMeat, bg=$currentBloodSugar =====")
         val state = _uiState.value
         _uiState.update { it.copy(isRecalculating = true) }
         try {
             when (val result = analyzeFoodUseCase.recalculate(
                 recognitionResult = parsed,
-                meatRatio = currentMeatRatio,
-                intakePercent = currentIntakePercent,
+                stapleIntake = currentStaple,
+                vegIntake = currentVeg,
+                meatIntake = currentMeat,
                 insulinType = state.insulinType,
                 bloodSugarStart = currentBloodSugar,
             )) {

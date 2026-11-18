@@ -11,8 +11,11 @@ import com.example.diabetesassistant.domain.algorithm.InsulinBandResult
 data class AnalysisResultJson(
     val totalCarbIntake: Float = 0f,
     val weightedGi: Float = 0f,
-    val meatRatio: Float = 0.5f,
-    val intakePercent: Float = 0.6f,
+    val meatRatio: Float? = null,
+    val intakePercent: Float? = null,
+    val stapleIntake: Float? = null,
+    val vegIntake: Float? = null,
+    val meatIntake: Float? = null,
     val insulinType: String = "RAPID",
     val bloodSugarStart: Float = 5.0f,
     val recognitionResult: DishRecognitionResult? = null,
@@ -21,4 +24,21 @@ data class AnalysisResultJson(
     val focusPeriods: List<FocusPeriod>? = null,
     val reminders: List<String>? = null,
     val ingredientCarbsMap: Map<String, Float>? = null,
-)
+) {
+    val effectiveMeatRatio: Float
+        get() = meatRatio?.coerceIn(0f, 1f) ?: 0.5f
+
+    val effectiveIntakePercent: Float
+        get() = intakePercent?.coerceIn(0f, 1f) ?: 1.0f
+
+    val effectiveStapleIntake: Float
+        get() = stapleIntake?.coerceIn(0f, 1f) ?: effectiveIntakePercent
+
+    val effectiveVegIntake: Float
+        get() = vegIntake?.coerceIn(0f, 1f)
+            ?: ((2f * (1f - effectiveMeatRatio)).coerceIn(0f, 1f) * effectiveIntakePercent).coerceIn(0f, 1f)
+
+    val effectiveMeatIntake: Float
+        get() = meatIntake?.coerceIn(0f, 1f)
+            ?: ((2f * effectiveMeatRatio).coerceIn(0f, 1f) * effectiveIntakePercent).coerceIn(0f, 1f)
+}

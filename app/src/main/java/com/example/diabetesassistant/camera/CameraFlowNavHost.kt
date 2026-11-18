@@ -75,8 +75,9 @@ fun CameraFlowNavHost(
             val state by viewModel.uiState.collectAsState()
             ArchiveDetailScreen(
                 uiState = state,
-                onMeatRatioChange = { viewModel.updateMeatRatio(it) },
-                onIntakePercentChange = { viewModel.updateIntakePercent(it) },
+                onStapleIntakeChange = { viewModel.updateStapleIntake(it) },
+                onVegIntakeChange = { viewModel.updateVegIntake(it) },
+                onMeatIntakeChange = { viewModel.updateMeatIntake(it) },
                 onBloodSugarChange = { viewModel.updateBloodSugarStart(it) },
                 onInsulinTypeChange = { viewModel.updateInsulinType(it) },
                 onSave = {

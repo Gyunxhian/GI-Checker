@@ -1,5 +1,6 @@
 package com.example.diabetesassistant.domain.algorithm
 
+import com.example.diabetesassistant.data.model.FoodCategory
 import com.example.diabetesassistant.data.model.InsulinType
 
 /**
@@ -15,10 +16,13 @@ data class IngredientCarbDetail(
     val cookingCorrectionPer100g: Float,
     val combinedCarbsPer100g: Float,
     val totalCarbsG: Float,
-)
+) {
+    val foodCategory: FoodCategory
+        get() = FoodCategory.from(category, name)
+}
 
 /**
- * 荤素分组摘要。
+ * 分类分组摘要。
  */
 data class CategoryCarbSummary(
     val totalCarbsG: Float,
@@ -27,13 +31,14 @@ data class CategoryCarbSummary(
 )
 
 /**
- * 菜品总碳水摘要。
+ * 菜品总碳水三元组分摘要（211 控糖模型：主食、蔬菜、荤菜）。
  */
 data class MealCarbSummary(
-    val vegetable: CategoryCarbSummary,
-    val meat: CategoryCarbSummary,
-    val totalWeightG: Float,
-    val totalCarbsG: Float,
+    val staple: CategoryCarbSummary = CategoryCarbSummary(0f, 0f, 0f),
+    val vegetable: CategoryCarbSummary = CategoryCarbSummary(0f, 0f, 0f),
+    val meat: CategoryCarbSummary = CategoryCarbSummary(0f, 0f, 0f),
+    val totalWeightG: Float = 0f,
+    val totalCarbsG: Float = 0f,
 )
 
 /**

@@ -1,5 +1,6 @@
 package com.example.diabetesassistant.domain.algorithm
 
+import com.example.diabetesassistant.data.model.FoodCategory
 import com.example.diabetesassistant.data.model.Ingredient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -344,5 +345,136 @@ class CarbAndGiCalculatorTest {
         val gammaHigh = calculator.mapGiToGammaParams(100f)
         assertEquals(1.5f, gammaHigh.a, 0.0001f)
         assertEquals(20.0f, gammaHigh.b, 0.0001f)
+    }
+
+    // =========================================================================
+    // 211 控糖三元组分模型核心测试 (主食 Staple / 蔬菜 Vegetable / 荤菜 Meat)
+    // =========================================================================
+
+    @Test
+    fun foodCategory_parsesExplicitCategoriesAndKeywordsRobustly() {
+        // 显式分类
+        assertEquals(FoodCategory.STAPLE, FoodCategory.from("主食", "某食物"))
+        assertEquals(FoodCategory.STAPLE, FoodCategory.from("staple", "某食物"))
+        assertEquals(FoodCategory.MEAT, FoodCategory.from("荤", "某食物"))
+        assertEquals(FoodCategory.MEAT, FoodCategory.from("meat", "某食物"))
+        assertEquals(FoodCategory.MEAT, FoodCategory.from("protein", "某食物"))
+        assertEquals(FoodCategory.VEGETABLE, FoodCategory.from("素", "番茄"))
+
+        // 关键词智能识别主食
+        val stapleNames = listOf(
+            "米饭", "东北大米饭", "手工面条", "拉面", "鲜肉包子", "猪肉水饺", "酸辣凉皮",
+            "清蒸土豆", "烤红薯", "红糖年糕", "麦片粥", "披萨", "扬州炒饭", "炒面", "拌面",
+            "烧麦", "玉米窝头", "葱油饼", "全麦面包", "米粉", "粉丝", "意面", "燕麦片"
+        )
+        for (name in stapleNames) {
+            assertEquals("Ingredient '$name' must be classified as STAPLE",
+                FoodCategory.STAPLE, FoodCategory.from("素", name))
+            assertEquals("Ingredient '$name' with empty category must be classified as STAPLE",
+                FoodCategory.STAPLE, FoodCategory.from("", name))
+        }
+
+        // 关键词智能识别荤菜/蛋白质
+        val meatNames = listOf(
+            "五花肉", "鸡胸肉", "烤鸭", "清蒸草鱼", "基围虾", "大闸蟹", "海鲜煲",
+            "水煮蛋", "荷包蛋", "培根", "香肠", "牛排", "羊肉串", "排骨"
+        )
+        for (name in meatNames) {
+            assertEquals("Ingredient '$name' must be classified as MEAT",
+                FoodCategory.MEAT, FoodCategory.from("", name))
+        }
+
+        // 普通蔬菜与兜底
+        assertEquals(FoodCategory.VEGETABLE, FoodCategory.from("素", "西红柿"))
+        assertEquals(FoodCategory.VEGETABLE, FoodCategory.from("素", "西兰花"))
+        assertEquals(FoodCategory.VEGETABLE, FoodCategory.from("素", "菠菜"))
+        assertEquals(FoodCategory.VEGETABLE, FoodCategory.from("未知分类", "金针菇"))
+    }
+
+    @Test
+    fun summarizeByCategory_separatesStapleVegAndMeatAccurately() {
+        val details = listOf(
+            IngredientCarbDetail("米饭", "主食", 150f, "蒸", 83f, 28f, 0f, 28f, 42.0f),
+            IngredientCarbDetail("西兰花", "素", 200f, "白灼", 15f, 4f, 0f, 4f, 8.0f),
+            IngredientCarbDetail("鸡胸肉", "荤", 120f, "水煮", 0f, 0.5f, 0f, 0.5f, 0.6f),
+        )
+
+        val summary = calculator.summarizeByCategory(details)
+
+        // Staple
+        assertEquals(150f, summary.staple.totalWeightG, 0.0001f)
+        assertEquals(42.0f, summary.staple.totalCarbsG, 0.0001f)
+        assertEquals(42.0f / 150f, summary.staple.carbsPerGram, 0.0001f)
+
+        // Veg
+        assertEquals(200f, summary.vegetable.totalWeightG, 0.0001f)
+        assertEquals(8.0f, summary.vegetable.totalCarbsG, 0.0001f)
+        assertEquals(8.0f / 200f, summary.vegetable.carbsPerGram, 0.0001f)
+
+        // Meat
+        assertEquals(120f, summary.meat.totalWeightG, 0.0001f)
+        assertEquals(0.6f, summary.meat.totalCarbsG, 0.0001f)
+        assertEquals(0.6f / 120f, summary.meat.carbsPerGram, 0.0001f)
+
+        // Total
+        assertEquals(470f, summary.totalWeightG, 0.0001f)
+        assertEquals(50.6f, summary.totalCarbsG, 0.0001f)
+    }
+
+    @Test
+    fun calculateTotalCarbIntake_211LinearMassConservation_independentIntake() {
+        val summary = MealCarbSummary(
+            staple = CategoryCarbSummary(totalCarbsG = 40.0f, totalWeightG = 150f, carbsPerGram = 40f / 150f),
+            vegetable = CategoryCarbSummary(totalCarbsG = 10.0f, totalWeightG = 200f, carbsPerGram = 10f / 200f),
+            meat = CategoryCarbSummary(totalCarbsG = 2.0f, totalWeightG = 150f, carbsPerGram = 2f / 150f),
+            totalWeightG = 500f,
+            totalCarbsG = 52.0f,
+        )
+
+        // 100% full meal intake
+        val full = calculator.calculateTotalCarbIntake(summary, stapleIntake = 1.0f, vegIntake = 1.0f, meatIntake = 1.0f)
+        assertEquals(52.0f, full, 0.0001f)
+
+        // 控糖场景 1：主食减半 (50%)，蔬菜和荤菜吃完 (100%) -> 40*0.5 + 10*1.0 + 2*1.0 = 32.0g
+        val halfStaple = calculator.calculateTotalCarbIntake(summary, stapleIntake = 0.5f, vegIntake = 1.0f, meatIntake = 1.0f)
+        assertEquals(32.0f, halfStaple, 0.0001f)
+
+        // 控糖场景 2：完全不吃主食 (0%)，蔬菜全吃 (100%)，荤菜全吃 (100%) -> 0 + 10 + 2 = 12.0g
+        val noStaple = calculator.calculateTotalCarbIntake(summary, stapleIntake = 0.0f, vegIntake = 1.0f, meatIntake = 1.0f)
+        assertEquals(12.0f, noStaple, 0.0001f)
+
+        // 控糖场景 3：只吃主食 70%，蔬菜吃 50%，不吃肉 (0%) -> 40*0.7 + 10*0.5 + 2*0 = 28 + 5 = 33.0g
+        val custom = calculator.calculateTotalCarbIntake(summary, stapleIntake = 0.7f, vegIntake = 0.5f, meatIntake = 0.0f)
+        assertEquals(33.0f, custom, 0.0001f)
+
+        // 边界保护：溢出值与负值严格限制在 [0, 1]
+        val clamped = calculator.calculateTotalCarbIntake(summary, stapleIntake = -0.5f, vegIntake = 1.5f, meatIntake = 2.0f)
+        assertEquals(12.0f, clamped, 0.0001f) // 0*40 + 1.0*10 + 1.0*2 = 12.0g
+    }
+
+    @Test
+    fun calculateWeightedGi_dynamicWithIndividualIntakes_reducingStapleLowersGI() {
+        val details = listOf(
+            IngredientCarbDetail("米饭", "主食", 100f, "蒸", 83f, 28f, 0f, 28f, 28.0f), // 28g carb, GI 83
+            IngredientCarbDetail("菠菜", "素", 200f, "水煮", 15f, 2f, 0f, 2f, 4.0f),   // 4g carb, GI 15
+            IngredientCarbDetail("鸡胸肉", "荤", 150f, "水煮", 0f, 0f, 0f, 0f, 0.0f), // 0g carb, GI 0
+        )
+
+        // 全部 100%: (28 * 83 + 4 * 15) / 32 = 74.5f
+        val fullGi = calculator.calculateWeightedGi(details, stapleIntake = 1.0f, vegIntake = 1.0f, meatIntake = 1.0f)
+        assertEquals(74.5f, fullGi, 0.01f)
+
+        // 主食减半 (50%), 蔬菜全吃 (100%): (14 * 83 + 4 * 15) / 18 = (1162 + 60) / 18 = 67.89f
+        val halfStapleGi = calculator.calculateWeightedGi(details, stapleIntake = 0.5f, vegIntake = 1.0f, meatIntake = 1.0f)
+        assertEquals(67.89f, halfStapleGi, 0.01f)
+        assertTrue("Reducing staple intake must lower weighted GI", halfStapleGi < fullGi)
+
+        // 主食不吃 (0%), 蔬菜全吃 (100%): 仅剩蔬菜，GI = 15.0f
+        val noStapleGi = calculator.calculateWeightedGi(details, stapleIntake = 0.0f, vegIntake = 1.0f, meatIntake = 1.0f)
+        assertEquals(15.0f, noStapleGi, 0.01f)
+
+        // 全部摄入为 0%: 回退至菜品有效平均 GI (83 + 15) / 2 = 49.0f
+        val zeroIntakeGi = calculator.calculateWeightedGi(details, stapleIntake = 0.0f, vegIntake = 0.0f, meatIntake = 0.0f)
+        assertEquals(49.0f, zeroIntakeGi, 0.01f)
     }
 }

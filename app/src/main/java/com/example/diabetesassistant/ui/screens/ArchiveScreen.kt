@@ -98,7 +98,9 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import java.io.File
 import com.example.diabetesassistant.camera.AnalysisResultJson
+import com.example.diabetesassistant.data.local.BuiltInCarbFallback
 import com.example.diabetesassistant.data.local.entity.FoodRecord
+import com.example.diabetesassistant.data.model.FoodCategory
 import com.example.diabetesassistant.data.repository.FoodRecordRepository
 import com.example.diabetesassistant.ui.components.AmbientGlowBackground
 import com.example.diabetesassistant.ui.components.GlassCard
@@ -186,13 +188,13 @@ fun ArchiveScreen(
         }
     }
 
-    // 分时段碳水数据聚合 (日看板 0~10h, 11~17h, 18~24h)
+    // 分时段碳水数据聚合 (日看板 0~10h, 11~17h, 18~24h，真实 211 三元组分分解)
     val daySlotDataList = remember(recordsInPeriod, selectedPeriod) {
         if (selectedPeriod != StatsPeriod.DAY) emptyList()
         else {
-            var mMeat = 0f; var mVeg = 0f; var mCount = 0
-            var aMeat = 0f; var aVeg = 0f; var aCount = 0
-            var eMeat = 0f; var eVeg = 0f; var eCount = 0
+            var mStaple = 0f; var mVeg = 0f; var mMeat = 0f; var mCount = 0
+            var aStaple = 0f; var aVeg = 0f; var aMeat = 0f; var aCount = 0
+            var eStaple = 0f; var eVeg = 0f; var eMeat = 0f; var eCount = 0
 
             recordsInPeriod.forEach { rec ->
                 val localTime = Instant.ofEpochMilli(rec.recordDate)
@@ -203,23 +205,20 @@ fun ArchiveScreen(
                 try {
                     val parsed = gson.fromJson(rec.aiJson, AnalysisResultJson::class.java)
                     if (parsed != null) {
-                        val total = parsed.totalCarbIntake
-                        val mRatio = parsed.meatRatio.coerceIn(0f, 1f)
-                        val meat = total * mRatio
-                        val veg = total * (1f - mRatio)
+                        val (stapleC, vegC, meatC) = extractCarbBreakdown(parsed)
                         when (slot) {
-                            CarbTimeSlot.MORNING -> { mMeat += meat; mVeg += veg; mCount++ }
-                            CarbTimeSlot.AFTERNOON -> { aMeat += meat; aVeg += veg; aCount++ }
-                            CarbTimeSlot.EVENING -> { eMeat += meat; eVeg += veg; eCount++ }
+                            CarbTimeSlot.MORNING -> { mStaple += stapleC; mVeg += vegC; mMeat += meatC; mCount++ }
+                            CarbTimeSlot.AFTERNOON -> { aStaple += stapleC; aVeg += vegC; aMeat += meatC; aCount++ }
+                            CarbTimeSlot.EVENING -> { eStaple += stapleC; eVeg += vegC; eMeat += meatC; eCount++ }
                         }
                     }
                 } catch (_: Exception) {}
             }
 
             listOf(
-                DaySlotCarbData(CarbTimeSlot.MORNING, mMeat, mVeg, mMeat + mVeg, mCount),
-                DaySlotCarbData(CarbTimeSlot.AFTERNOON, aMeat, aVeg, aMeat + aVeg, aCount),
-                DaySlotCarbData(CarbTimeSlot.EVENING, eMeat, eVeg, eMeat + eVeg, eCount),
+                DaySlotCarbData(CarbTimeSlot.MORNING, mStaple, mVeg, mMeat, mStaple + mVeg + mMeat, mCount),
+                DaySlotCarbData(CarbTimeSlot.AFTERNOON, aStaple, aVeg, aMeat, aStaple + aVeg + aMeat, aCount),
+                DaySlotCarbData(CarbTimeSlot.EVENING, eStaple, eVeg, eMeat, eStaple + eVeg + eMeat, eCount),
             )
         }
     }
@@ -712,11 +711,53 @@ enum class CarbTimeSlot(val label: String, val timeRange: String) {
 
 data class DaySlotCarbData(
     val slot: CarbTimeSlot,
-    val meatCarbs: Float,
+    val stapleCarbs: Float,
     val vegCarbs: Float,
+    val meatCarbs: Float,
     val totalCarbs: Float,
     val mealCount: Int,
 )
+
+/**
+ * 从餐食快照中按 211 三元组分模型精确分解主食、蔬菜、荤菜碳水。
+ */
+internal fun extractCarbBreakdown(parsed: AnalysisResultJson): Triple<Float, Float, Float> {
+    val total = parsed.totalCarbIntake
+    if (total <= 0f) {
+        return Triple(0f, 0f, 0f)
+    }
+
+    val ingredients = parsed.recognitionResult?.dishes?.flatMap { it.ingredients }
+    if (!ingredients.isNullOrEmpty()) {
+        var stapleC = 0f
+        var vegC = 0f
+        var meatC = 0f
+
+        val sIntake = parsed.effectiveStapleIntake
+        val vIntake = parsed.effectiveVegIntake
+        val mIntake = parsed.effectiveMeatIntake
+
+        for (ing in ingredients) {
+            val baseCarb = parsed.ingredientCarbsMap?.get(ing.name)
+                ?: BuiltInCarbFallback.lookup(ing.name)
+                ?: BuiltInCarbFallback.lookup(ing.nameEn ?: "")
+                ?: 0f
+            val carbG = maxOf(0f, baseCarb * maxOf(0f, ing.weightG) / 100f)
+            when (FoodCategory.from(ing.category, ing.name)) {
+                FoodCategory.STAPLE -> stapleC += carbG * sIntake
+                FoodCategory.VEGETABLE -> vegC += carbG * vIntake
+                FoodCategory.MEAT -> meatC += carbG * mIntake
+            }
+        }
+        val sum = stapleC + vegC + meatC
+        if (sum > 0f) {
+            val scale = total / sum
+            return Triple(stapleC * scale, vegC * scale, meatC * scale)
+        }
+    }
+    // 缺失成分明细时的临床营养分布合理兜底：主食 ~85%, 蔬菜 ~13%, 荤肉 ~2%
+    return Triple(total * 0.85f, total * 0.13f, total * 0.02f)
+}
 
 data class DailyCarbData(
     val date: LocalDate,
@@ -817,14 +858,19 @@ private fun CarbIntakeBarChartCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFE67E22)))
+                            Spacer(Modifier.width(4.dp))
+                            Text(text = "主食", fontSize = 10.sp, color = HealthPalette.textMuted())
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(HealthPalette.Secondary))
                             Spacer(Modifier.width(4.dp))
-                            Text(text = "素食碳水", fontSize = 10.sp, color = HealthPalette.textMuted())
+                            Text(text = "蔬菜", fontSize = 10.sp, color = HealthPalette.textMuted())
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFE76F51)))
                             Spacer(Modifier.width(4.dp))
-                            Text(text = "荤食碳水", fontSize = 10.sp, color = HealthPalette.textMuted())
+                            Text(text = "荤菜", fontSize = 10.sp, color = HealthPalette.textMuted())
                         }
                     }
                 } else {
@@ -940,9 +986,10 @@ private fun CarbIntakeBarChartCard(
                                     cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
                                 )
                             } else {
+                                val stapleHeight = (slot.stapleCarbs / maxVal) * chartHeight
                                 val vegHeight = (slot.vegCarbs / maxVal) * chartHeight
                                 val meatHeight = (slot.meatCarbs / maxVal) * chartHeight
-                                val totalHeight = vegHeight + meatHeight
+                                val totalHeight = stapleHeight + vegHeight + meatHeight
 
                                 // 选中时的高光外晕
                                 if (isSelected) {
@@ -954,12 +1001,29 @@ private fun CarbIntakeBarChartCard(
                                     )
                                 }
 
+                                val hasStaple = slot.stapleCarbs > 0f
                                 val hasVeg = slot.vegCarbs > 0f
                                 val hasMeat = slot.meatCarbs > 0f
 
-                                // 1. 下层素食碳水 (薄荷绿)
+                                // 1. 底层：主食碳水 (暖琥珀橙)
+                                if (hasStaple) {
+                                    val stapleTop = chartHeight - stapleHeight
+                                    drawBarSegment(
+                                        color = Color(0xFFE67E22),
+                                        left = left,
+                                        top = stapleTop,
+                                        width = barWidth,
+                                        height = stapleHeight,
+                                        isTopSegment = !hasVeg && !hasMeat,
+                                        isBottomSegment = true,
+                                        topCornerRadius = 10.dp.toPx(),
+                                        bottomCornerRadius = 0f,
+                                    )
+                                }
+
+                                // 2. 中层：蔬菜碳水 (薄荷绿)
                                 if (hasVeg) {
-                                    val vegTop = chartHeight - vegHeight
+                                    val vegTop = chartHeight - stapleHeight - vegHeight
                                     drawBarSegment(
                                         color = HealthPalette.Secondary,
                                         left = left,
@@ -967,13 +1031,13 @@ private fun CarbIntakeBarChartCard(
                                         width = barWidth,
                                         height = vegHeight,
                                         isTopSegment = !hasMeat,
-                                        isBottomSegment = true,
+                                        isBottomSegment = !hasStaple,
                                         topCornerRadius = 10.dp.toPx(),
                                         bottomCornerRadius = 0f,
                                     )
                                 }
 
-                                // 2. 上层荤食碳水 (暖琥珀橙)
+                                // 3. 顶层：荤菜/蛋白质碳水 (橙红)
                                 if (hasMeat) {
                                     val meatTop = chartHeight - totalHeight
                                     drawBarSegment(
@@ -983,7 +1047,7 @@ private fun CarbIntakeBarChartCard(
                                         width = barWidth,
                                         height = meatHeight,
                                         isTopSegment = true,
-                                        isBottomSegment = !hasVeg,
+                                        isBottomSegment = !hasStaple && !hasVeg,
                                         topCornerRadius = 10.dp.toPx(),
                                         bottomCornerRadius = 0f,
                                     )
@@ -1240,10 +1304,19 @@ private fun DayCarbTooltipBubble(
                 color = HealthPalette.Secondary,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFE67E22)))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = "主食碳水: ${"%.1f".format(data.stapleCarbs)}g (${if (data.totalCarbs > 0) ((data.stapleCarbs / data.totalCarbs) * 100).toInt() else 0}%)",
+                    fontSize = 10.sp,
+                    color = HealthPalette.textSecondary(),
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(HealthPalette.Secondary))
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    text = "素食碳水: ${"%.1f".format(data.vegCarbs)}g (${if (data.totalCarbs > 0) ((data.vegCarbs / data.totalCarbs) * 100).toInt() else 0}%)",
+                    text = "蔬菜碳水: ${"%.1f".format(data.vegCarbs)}g (${if (data.totalCarbs > 0) ((data.vegCarbs / data.totalCarbs) * 100).toInt() else 0}%)",
                     fontSize = 10.sp,
                     color = HealthPalette.textSecondary(),
                 )
@@ -1252,7 +1325,7 @@ private fun DayCarbTooltipBubble(
                 Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFE76F51)))
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    text = "荤食碳水: ${"%.1f".format(data.meatCarbs)}g (${if (data.totalCarbs > 0) ((data.meatCarbs / data.totalCarbs) * 100).toInt() else 0}%)",
+                    text = "荤菜碳水: ${"%.1f".format(data.meatCarbs)}g (${if (data.totalCarbs > 0) ((data.meatCarbs / data.totalCarbs) * 100).toInt() else 0}%)",
                     fontSize = 10.sp,
                     color = HealthPalette.textSecondary(),
                 )

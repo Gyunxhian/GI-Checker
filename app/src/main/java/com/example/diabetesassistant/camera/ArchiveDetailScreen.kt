@@ -82,6 +82,7 @@ import coil.request.ImageRequest
 import java.io.File
 import com.example.diabetesassistant.data.local.BuiltInCarbFallback
 import com.example.diabetesassistant.data.model.DishRecognitionResult
+import com.example.diabetesassistant.data.model.FoodCategory
 import com.example.diabetesassistant.data.model.Ingredient
 import com.example.diabetesassistant.data.model.InsulinType
 import com.example.diabetesassistant.domain.algorithm.BloodSugarPoint
@@ -102,13 +103,16 @@ private val ThresholdLow = Color(0xFF3498DB)
 @Composable
 fun ArchiveDetailScreen(
     uiState: ArchiveDetailUiState,
-    onMeatRatioChange: (Float) -> Unit,
-    onIntakePercentChange: (Float) -> Unit,
+    onStapleIntakeChange: (Float) -> Unit = {},
+    onVegIntakeChange: (Float) -> Unit = {},
+    onMeatIntakeChange: (Float) -> Unit = {},
     onBloodSugarChange: (Float) -> Unit,
     onInsulinTypeChange: (InsulinType) -> Unit,
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
+    onMeatRatioChange: (Float) -> Unit = {},
+    onIntakePercentChange: (Float) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -204,33 +208,44 @@ fun ArchiveDetailScreen(
 
             item {
                 Text(
-                    "荤素比例  ${"%.0f".format(uiState.meatRatio * 100)}%荤  ${"%.0f".format((1 - uiState.meatRatio) * 100)}%素",
+                    "211 控糖三元组分摄入调节",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 16.dp, top = 12.dp),
-                )
-                SliderSection(
-                    value = uiState.meatRatio,
-                    onValueChange = onMeatRatioChange,
-                    valueRange = 0f..1f,
-                    trackColors = listOf(MaterialTheme.colorScheme.primary, ThresholdElevated),
+                    modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp),
                 )
             }
 
             item {
-                Text(
-                    "摄入量  ${"%.0f".format(uiState.intakePercent * 100)}%",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+                NutrientComponentSlider(
+                    title = "主食摄入",
+                    icon = "🍚",
+                    subtitle = "米面、根茎淀粉类",
+                    value = uiState.stapleIntake,
+                    onValueChange = onStapleIntakeChange,
+                    accentColor = Color(0xFFE67E22),
                 )
-                SliderSection(
-                    value = uiState.intakePercent,
-                    onValueChange = onIntakePercentChange,
-                    valueRange = 0f..1f,
-                    trackColors = listOf(MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.primary),
+            }
+
+            item {
+                NutrientComponentSlider(
+                    title = "蔬菜摄入",
+                    icon = "🥦",
+                    subtitle = "绿叶菜、高纤菌菇",
+                    value = uiState.vegIntake,
+                    onValueChange = onVegIntakeChange,
+                    accentColor = HealthPalette.Secondary,
+                )
+            }
+
+            item {
+                NutrientComponentSlider(
+                    title = "荤菜摄入",
+                    icon = "🥩",
+                    subtitle = "肉、蛋、水产蛋白质",
+                    value = uiState.meatIntake,
+                    onValueChange = onMeatIntakeChange,
+                    accentColor = Color(0xFFE76F51),
                 )
             }
 
@@ -385,32 +400,100 @@ private fun DishImageSection(imageUri: String) {
 }
 
 @Composable
-private fun SliderSection(
+private fun NutrientComponentSlider(
+    title: String,
+    icon: String,
+    subtitle: String,
     value: Float,
     onValueChange: (Float) -> Unit,
-    valueRange: ClosedFloatingPointRange<Float>,
-    trackColors: List<Color>,
+    accentColor: Color,
 ) {
+    val safeValue = value.coerceIn(0f, 1f)
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = icon, fontSize = 16.sp)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "($subtitle)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = accentColor.copy(alpha = 0.16f),
+                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.45f)),
+                ) {
+                    Text(
+                        text = "${(safeValue * 100).toInt()}%",
+                        color = accentColor,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+            }
+
             Slider(
-                value = value,
+                value = safeValue,
                 onValueChange = onValueChange,
-                valueRange = valueRange,
+                valueRange = 0f..1f,
                 colors = SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.primary,
-                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    thumbColor = accentColor,
+                    activeTrackColor = accentColor,
                     inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
                 ),
+                modifier = Modifier.padding(top = 2.dp, bottom = 0.dp),
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(0f to "不吃 (0%)", 0.5f to "半份 (50%)", 1.0f to "全吃 (100%)").forEach { (presetVal, label) ->
+                    val isCurrent = kotlin.math.abs(safeValue - presetVal) < 0.05f
+                    Surface(
+                        onClick = { onValueChange(presetVal) },
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isCurrent) accentColor.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        border = BorderStroke(1.dp, if (isCurrent) accentColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isCurrent) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1015,8 +1098,12 @@ private fun IngredientsBreakdownCard(
                 )
 
                 dish.ingredients.forEach { ingredient ->
-                    val isMeat = ingredient.category.contains("meat", ignoreCase = true) || ingredient.category.contains("荤")
-                    val badgeColor = if (isMeat) ThresholdElevated else MaterialTheme.colorScheme.primary
+                    val cat = FoodCategory.from(ingredient.category, ingredient.name)
+                    val (badgeText, badgeColor) = when (cat) {
+                        FoodCategory.STAPLE -> "🍚 主食" to Color(0xFFE67E22)
+                        FoodCategory.VEGETABLE -> "🥦 素" to HealthPalette.Secondary
+                        FoodCategory.MEAT -> "🥩 荤" to Color(0xFFE76F51)
+                    }
                     // 权威中餐成分库优先匹配，防御历史异常值（如鸡蛋 57.7g、凉粉 98.9g、紫菜 52.4g）
                     val localStandard = BuiltInCarbFallback.lookup(ingredient.name)
                         ?: BuiltInCarbFallback.lookup(ingredient.nameEn ?: "")
@@ -1036,11 +1123,11 @@ private fun IngredientsBreakdownCard(
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = badgeColor.copy(alpha = 0.22f),
-                                border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.50f)),
+                                color = badgeColor.copy(alpha = 0.20f),
+                                border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.45f)),
                             ) {
                                 Text(
-                                    text = if (isMeat) "荤" else "素",
+                                    text = badgeText,
                                     color = badgeColor,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,

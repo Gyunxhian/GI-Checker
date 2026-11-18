@@ -64,6 +64,28 @@ class Phase3AlgorithmTest {
     }
 
     @Test
+    fun step3_calculatesTotalCarbIntake_211ThreeTier() {
+        val summary = MealCarbSummary(
+            staple = CategoryCarbSummary(totalCarbsG = 42.0f, totalWeightG = 150f, carbsPerGram = 42f / 150f),
+            vegetable = CategoryCarbSummary(totalCarbsG = 8.0f, totalWeightG = 200f, carbsPerGram = 8f / 200f),
+            meat = CategoryCarbSummary(totalCarbsG = 1.0f, totalWeightG = 100f, carbsPerGram = 1f / 100f),
+            totalWeightG = 450f,
+            totalCarbsG = 51.0f,
+        )
+
+        // 211 Model formula: C_staple * I_staple + C_veg * I_veg + C_meat * I_meat
+        val intake = calculator.calculateTotalCarbIntake(
+            summary = summary,
+            stapleIntake = 0.5f,
+            vegIntake = 1.0f,
+            meatIntake = 0.8f,
+        )
+
+        val expected = 42.0f * 0.5f + 8.0f * 1.0f + 1.0f * 0.8f
+        assertEquals(expected, intake, 0.0001f)
+    }
+
+    @Test
     fun step4_calculatesWeightedGi_equals35Point3() {
         val details = listOf(
             IngredientCarbDetail("番茄", "素", 150f, "炒", 15f, 3.9f, 2f, 5.9f, 8.85f),
